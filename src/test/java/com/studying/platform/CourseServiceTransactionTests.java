@@ -338,6 +338,84 @@ class CourseServiceTransactionTests {
     }
 
     /**
+     * Проверка: updateCourse с нулевой длительностью выбрасывает исключение,
+     * данные курса остаются неизменными.
+     * <p>
+     * Создаёт курс через сервис; вызывает updateCourse с duration = 0;
+     * ожидает IllegalArgumentException; затем в новой транзакции
+     * через репозиторий проверяет, что название и продолжительность прежние.
+     * </p>
+     */
+    @Test
+    void updateCourse_withZeroDuration_shouldThrow() {
+        // Создание фикстур в транзакциях
+        User teacher = createTeacherInTransaction("updatezero-teacher", UserRole.TEACHER);
+        teacherId = teacher.getId();
+        Category category = createCategoryInTransaction("Тест нулевой длительности");
+        categoryId = category.getId();
+
+        Course course = courseService.createCourse(
+                "Исходный курс", "Описание", 20,
+                LocalDate.now().plusDays(10),
+                teacher.getId(), category.getId());
+        courseId = course.getId();
+
+        // Попытка обновления с duration = 0
+        assertThrows(IllegalArgumentException.class,
+                () -> courseService.updateCourse(
+                        course.getId(),
+                        "Новый заголовок",
+                        "Новое описание",
+                        0,
+                        LocalDate.now().plusDays(20)
+                ),
+                "Должно быть выброшено IllegalArgumentException при нулевой продолжительности");
+
+        // Проверка в новой транзакции: данные не изменились
+        Course unchanged = courseRepository.findById(courseId).orElseThrow();
+        assertEquals(20, unchanged.getDuration(),
+                "Продолжительность не должна измениться после ошибочного обновления");
+        assertEquals("Исходный курс", unchanged.getTitle(),
+                "Название не должно измениться после ошибочного обновления");
+    }
+
+    /**
+     * Проверка: updateCourse с отрицательной длительностью выбрасывает исключение,
+     * данные курса остаются неизменными.
+     */
+    @Test
+    void updateCourse_withNegativeDuration_shouldThrow() {
+        User teacher = createTeacherInTransaction("updateneg-teacher", UserRole.TEACHER);
+        teacherId = teacher.getId();
+        Category category = createCategoryInTransaction("Тест отрицательной длительности");
+        categoryId = category.getId();
+
+        Course course = courseService.createCourse(
+                "Исходный курс", "Описание", 25,
+                LocalDate.now().plusDays(10),
+                teacher.getId(), category.getId());
+        courseId = course.getId();
+
+        // Попытка обновления с duration = -10
+        assertThrows(IllegalArgumentException.class,
+                () -> courseService.updateCourse(
+                        course.getId(),
+                        "Новый заголовок",
+                        "Новое описание",
+                        -10,
+                        LocalDate.now().plusDays(20)
+                ),
+                "Должно быть выброшено IllegalArgumentException при отрицательной продолжительности");
+
+        // Проверка в новой транзакции: данные не изменились
+        Course unchanged = courseRepository.findById(courseId).orElseThrow();
+        assertEquals(25, unchanged.getDuration(),
+                "Продолжительность не должна измениться после ошибочного обновления");
+        assertEquals("Исходный курс", unchanged.getTitle(),
+                "Название не должно измениться после ошибочного обновления");
+    }
+
+    /**
      * Создает и сохраняет пользователя в транзакции через TransactionTemplate.
      *
      * @param localPart локальная часть email (до @)

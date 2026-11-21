@@ -519,6 +519,36 @@ class CourseManagementTests {
     }
 
     /**
+     * Тест: создание курса с null продолжительностью.
+     * <p>
+     * Проверяет, что при вызове createCourse с duration = null
+     * выбрасывается IllegalArgumentException и курс не создаётся.
+     * </p>
+     */
+    @Test
+    void createCourse_withNullDuration_shouldThrow() {
+        User teacher = createTeacher("createteachernullduration@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseService.createCourse(
+                        "Курс", "Описание", null,
+                        LocalDate.of(2026, 9, 1),
+                        teacher.getId(),
+                        category.getId()
+                ),
+                "Должно быть выброшено IllegalArgumentException при null продолжительности"
+        );
+        assertTrue(exception.getMessage().contains("не менее 1 часа"),
+                "Сообщение исключения должно содержать информацию о минимальной продолжительности");
+
+        // Проверка: курс не создан
+        assertEquals(0L, courseRepository.count(),
+                "В базе не должно быть создано курсов после ошибочного создания");
+    }
+
+    /**
      * Тест: создание курса с минимальной допустимой продолжительностью 1 час.
      * <p>
      * Проверяет, что при duration = 1 курс создаётся успешно.

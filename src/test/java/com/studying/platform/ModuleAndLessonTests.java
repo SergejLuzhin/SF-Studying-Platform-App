@@ -302,8 +302,10 @@ class ModuleAndLessonTests {
         // Удаляем курс
         courseRepository.deleteById(courseId);
         entityManager.flush();
+        // Очищаем контекст — убедиться, что данные удалены из базы, а не только из кэша
+        entityManager.clear();
 
-        // Проверка: курс, модули и уроки удалены
+        // Проверка: курс, модули и уроки удалены (чтение из очищенного контекста)
         assertFalse(courseRepository.findById(courseId).isPresent(),
                 "Курс должен быть удалён");
         assertFalse(moduleRepository.findById(module1Id).isPresent(),

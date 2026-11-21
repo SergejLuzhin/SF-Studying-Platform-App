@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 14 плана исправлений: Исправление и проверка JavaDoc** (`completed`)
+**Пункт 15 плана исправлений: Дополнение регрессионных тестов CRUD и валидации** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -49,6 +49,25 @@
 
 ### Следующий шаг:
 Пункт 15 — дополнение регрессионных тестов CRUD и валидации длительности курса.
+
+---
+
+## Выполнено — Пункт 15: Дополнение регрессионных тестов CRUD и валидации (`completed`)
+
+### Изменённые файлы:
+- **`src/test/java/com/studying/platform/CourseManagementTests.java`** — добавлен тест `createCourse_withNullDuration_shouldThrow`: создаёт валидные категорию и преподавателя, вызывает `createCourse` с `duration = null`, ожидает `IllegalArgumentException`, проверяет что курс не создан (`courseRepository.count() == 0`)
+- **`src/test/java/com/studying/platform/ModuleAndLessonTests.java`** — в `testCascadeDeleteCourseRemovesModulesAndLessons` добавлен `entityManager.clear()` после `flush()`; проверка отсутствия курса, обоих модулей и обоих уроков выполняется из очищенного контекста
+- **`src/test/java/com/studying/platform/CourseServiceTransactionTests.java`** — добавлены 2 теста через настоящий Spring-прокси:
+  - `updateCourse_withZeroDuration_shouldThrow` — создаёт курс, вызывает `updateCourse` с `duration = 0`, ожидает `IllegalArgumentException`, проверяет в новой транзакции что данные unchanged
+  - `updateCourse_withNegativeDuration_shouldThrow` — аналогично с `duration = -10`
+
+### Результаты проверок:
+- `mvn test -Dtest=CourseManagementTests,ModuleAndLessonTests,CourseServiceTransactionTests`: **42 PASS** (19 + 17 + 6) — PASS
+- `mvn verify`: **150 PASS**, 0 FAIL, 0 ERROR — PASS
+- `git diff --check`: **PASS** (нет проблем с форматированием)
+
+### Следующий шаг:
+Пункт 16 — привести документы в порядок и повторить приёмку.
 
 ---
 
