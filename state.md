@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 7 плана исправлений: Доказать каскадное сохранение и повторное чтение** (`completed`)
+**Пункт 10 плана исправлений: Итоговая независимая проверка и актуализация состояния** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -261,3 +261,50 @@
 
 ### Следующий шаг:
 Пункт 10 — итоговая независимая проверка и актуализация состояния.
+
+---
+
+## Выполнено — Пункт 10: Итоговая независимая проверка и актуализация состояния
+
+### Созданный файл:
+- **`src/test/java/com/studying/platform/MvpFlowTests.java`** — 5 сквозных интеграционных тестов через `@SpringBootTest` с `@Transactional(propagation = Propagation.NOT_SUPPORTED)`:
+  - `fullMvpFlow_createEnrollReadDropReenrollmentBlocked` — полный MVP-сценарий: создание преподавателя и студента через `UserService`, создание категории, курса, модуля и урока через `CourseService`, запись студента через `EnrollmentService`, чтение структуры и списков вне транзакции, отписка, проверка статуса `DROPPED`, пустых активных списков и запрета повторной записи
+  - `userServiceIntegration_courseAndEnrollmentWork` — интеграция `UserService` с `CourseService` и `EnrollmentService`
+  - `reenrollmentActiveCourse_shouldThrow` — запрет повторной записи на активный курс
+  - `enrollNonExistentCourse_shouldThrow` — исключение при записи на несуществующий курс
+  - `getNonExistentCourseStructure_shouldThrow` — исключение при чтении несуществующего курса
+
+### Результаты всех проверок:
+- **`java -version`**: Java 23.0.2 — PASS
+- **`mvn -version`**: Maven 3.10.0, Java 23 — PASS
+- **`docker info`**: Docker Desktop 28.3.2, Testcontainers version 1.21.2 — PASS
+- **`mvn test -Dtest=MvpFlowTests`**: 5 PASS, 0 FAIL — PASS
+- **`mvn verify`**: 133 PASS (11 классов тестов), 0 FAIL, 0 ERROR — PASS
+- **`git diff --check`**: PASS (нет проблем с форматированием)
+- **Проверка схемы** (PostgresSchemaTests): 9 проверок — PASS
+- **Проверка каскадов** (ModuleAndLessonTests): каскадное сохранение и удаление — PASS
+- **Проверка транзакций** (EnrollmentServiceTransactionTests + CourseServiceTransactionTests): данные доступны вне транзакции — PASS
+- **Проверка уникальности** (EnrollmentTests + MvpFlowTests): ограничение БД и сервисная проверка — PASS
+- **Негативные сценарии** (все классы): 404, валидация, дубликаты — PASS
+
+### Итого по всем тестам:
+| Класс тестов | Кол-во тестов | Статус |
+|---|---|---|
+| PostgresSchemaTests | 9 | PASS |
+| EnrollmentServiceTransactionTests | 8 | PASS |
+| StudyingPlatformApplicationTests | 7 | PASS |
+| CourseServiceTransactionTests | 4 | PASS |
+| UserAndProfileTests | 20 | PASS |
+| CourseManagementTests | 18 | PASS |
+| ModuleAndLessonTests | 17 | PASS |
+| CategoryAndCourseTests | 16 | PASS |
+| UserServiceTests | 15 | PASS |
+| EnrollmentTests | 14 | PASS |
+| MvpFlowTests | 5 | PASS |
+| **Всего** | **133** | **Все PASS** |
+
+### Блокер существующей базы:
+Колонка `users.password NOT NULL` сохранится при `ddl-auto=update` — вставка без пароля в старую схему завершится ошибкой. Тесты используют отдельную контейнерную БД (`create-drop`), поэтому не затронуты. Для использования старой рабочей БД требуется согласованная миграция.
+
+### Следующий шаг:
+Переход к Этапу 09: Задания — реализация `Assignment`, репозитория и управления заданиями урока.
