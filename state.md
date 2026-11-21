@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 11 плана исправлений: Изоляция и безопасная очистка интеграционных тестов** (`completed`)
+**Пункт 14 плана исправлений: Исправление и проверка JavaDoc** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -33,7 +33,26 @@
 
 ---
 
-## Выполнено — Пункт 13: Исправление хранения текстовых полей PostgreSQL (`completed`)
+## Выполнено — Пункт 14: Исправление и проверка JavaDoc (`completed`)
+
+### Изменённые файлы:
+- **`src/main/java/com/studying/platform/service/EnrollmentService.java`** — добавлен импорт `org.springframework.data.jpa.repository.EntityGraph` для разрешения ссылок `{@link EntityGraph}` в JavaDoc методов `getStudentCourses` и `getCourseStudents`
+- **`src/main/java/com/studying/platform/entity/User.java`** — в Javadoc поля `profile` убрано утверждение о гарантированно ленивой загрузке (`@OneToOne` по умолчанию имеет `fetch = EAGER`); описание заменено на точное
+- **`src/main/java/com/studying/platform/service/CourseService.java`** — в Javadoc `addModule` и `addLesson` исправлено: убрано неверное упоминание «каскадного сохранения»; указано, что используется явный `entityManager.persist` и `flush`, без сброса контекста
+
+### Результаты проверок:
+- `mvn compile`: **успешно, 0 ошибок** — PASS
+- `mvn javadoc:javadoc` (основной код): **BUILD SUCCESS**, 1 предупреждение (не связанное: `StudyingPlatformApplication` default constructor); **нет ошибок `reference not found`** — PASS
+- `mvn verify`: **147 PASS**, 0 FAIL, 0 ERROR — PASS
+- `git diff --check`: **PASS** (нет проблем с форматированием)
+- Генерация JavaDoc для тестовых классов (`PostgresSchemaTests`): **NOT_RUN** — класс package-private, `javadoc` не может обработать non-public классы (известное ограничение JDK)
+
+### Следующий шаг:
+Пункт 15 — дополнение регрессионных тестов CRUD и валидации длительности курса.
+
+---
+
+## Выполнено — Пункт 11: Изоляция и безопасная очистка интеграционных тестов
 
 ### Изменённые файлы (сущности — удаление `@Lob`):
 - **`src/main/java/com/studying/platform/entity/Course.java`** — удалён `@Lob` с поля `description`, удалён импорт `jakarta.persistence.Lob`
