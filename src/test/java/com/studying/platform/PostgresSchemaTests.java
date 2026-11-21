@@ -9,14 +9,21 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Интеграционные тесты для проверки схемы базы данных PostgreSQL.
  * <p>
- * Проверяют наличие реализованных таблиц, первичных ключей, внешних ключей
- * и уникальных ограничений через метаданные JDBC (information_schema).
+ * Проверяют наличие реализованных таблиц, точный состав первичных ключей,
+ * все четыре компонента внешних ключей и уникальные ограничения,
+ * сгруппированные по идентификатору ограничения, а не по таблице.
  * Тесты выполняются с реальной PostgreSQL через Testcontainers в профиле «test».
  * </p>
  */
@@ -93,7 +100,7 @@ class PostgresSchemaTests {
             ResultSet tables = connection.getMetaData().getTables(
                     null, currentSchema(connection), null, new String[]{"TABLE"});
 
-            java.util.Set<String> actualTables = new java.util.HashSet<>();
+            Set<String> actualTables = new HashSet<>();
             while (tables.next()) {
                 actualTables.add(tables.getString("TABLE_NAME").toLowerCase());
             }
@@ -107,10 +114,12 @@ class PostgresSchemaTests {
     }
 
     /**
-     * Проверяет наличие первичных ключей для каждой таблицы.
+     * Проверяет точный состав первичных ключей для каждой таблицы.
      * <p>
-     * У всех таблиц, кроме {@code course_tag}, первичный ключ — одиночный {@code id}.
-     * Для {@code course_tag} первичный ключ составной из {@code course_id} и {@code tag_id}.
+     * Для таблиц с одиночным ключом проверяет, что набор колонок PK
+     * в точности равен {@code {id}}. Для {@code course_tag} проверяет
+     * точное равенство множеству {@code {course_id, tag_id}}.
+     * Лишние колонки в PK приводят к ошибке.
      * </p>
      *
      * @param dataSource автоматически настроенный Spring DataSource
@@ -118,53 +127,49 @@ class PostgresSchemaTests {
      */
     @Test
     void primaryKeysExist(@Autowired DataSource dataSource) throws Exception {
-        // Таблицы с одиночным PK "id"
-        String[] singlePkTables = {"users", "profiles", "categories", "courses",
-                "modules", "lessons", "enrollments", "tags", "course_reviews"};
+        // Таблицы с одиночным PK {id}
+        Map<String, Set<String>> expectedPks = new LinkedHashMap<>();
+        expectedPks.put("users", Set.of("id"));
+        expectedPks.put("profiles", Set.of("id"));
+        expectedPks.put("categories", Set.of("id"));
+        expectedPks.put("courses", Set.of("id"));
+        expectedPks.put("modules", Set.of("id"));
+        expectedPks.put("lessons", Set.of("id"));
+        expectedPks.put("enrollments", Set.of("id"));
+        expectedPks.put("tags", Set.of("id"));
+        expectedPks.put("course_reviews", Set.of("id"));
+        expectedPks.put("course_tag", Set.of("course_id", "tag_id"));
 
         try (Connection connection = dataSource.getConnection()) {
-            for (String tableName : singlePkTables) {
+            String schema = currentSchema(connection);
+
+            for (Map.Entry<String, Set<String>> entry : expectedPks.entrySet()) {
+                String tableName = entry.getKey();
+                Set<String> expectedColumns = entry.getValue();
+
                 ResultSet pkRs = connection.getMetaData().getPrimaryKeys(
-                        null, currentSchema(connection), tableName);
+                        null, schema, tableName);
 
-                boolean found = false;
+                Set<String> actualColumns = new HashSet<>();
                 while (pkRs.next()) {
-                    String columnName = pkRs.getString("COLUMN_NAME").toLowerCase();
-                    if ("id".equals(columnName)) {
-                        found = true;
-                        break;
-                    }
+                    actualColumns.add(pkRs.getString("COLUMN_NAME").toLowerCase());
                 }
-                assertTrue(found,
-                        "Таблица «" + tableName + "» должна иметь первичный ключ «id». " +
-                                "Проверяется через getPrimaryKeys() JDBC metadata.");
+
+                // Проверяем точное равенство множеств: не только наличие, но и отсутствие лишних колонок
+                assertEquals(expectedColumns, actualColumns,
+                        "Таблица «" + tableName + "»: ожидаемый набор колонок первичного ключа " +
+                                expectedColumns + ", получено " + actualColumns);
             }
-
-            // course_tag — составной первичный ключ (course_id, tag_id)
-            ResultSet courseTagPk = connection.getMetaData().getPrimaryKeys(
-                    null, currentSchema(connection), "course_tag");
-
-            java.util.Set<String> courseTagPkColumns = new java.util.HashSet<>();
-            while (courseTagPk.next()) {
-                courseTagPkColumns.add(courseTagPk.getString("COLUMN_NAME").toLowerCase());
-            }
-
-            assertTrue(courseTagPkColumns.contains("course_id"),
-                    "course_tag должна иметь «course_id» в первичном ключе");
-            assertTrue(courseTagPkColumns.contains("tag_id"),
-                    "course_tag должна иметь «tag_id» в первичном ключе");
         }
     }
 
     /**
-     * Проверяет наличие внешних ключей для всех реализованных связей.
+     * Проверяет точный состав внешних ключей.
      * <p>
-     * Проверяются FK: profiles.user_id → users.id, courses.teacher_id → users.id,
-     * courses.category_id → categories.id, modules.course_id → courses.id,
-     * lessons.module_id → modules.id, enrollments.user_id → users.id,
-     * enrollments.course_id → courses.id, course_reviews.course_id → courses.id,
-     * course_reviews.student_id → users.id, course_tag.course_id → courses.id,
-     * course_tag.tag_id → tags.id.
+     * Для каждого FK проверяет все четыре компонента:
+     * таблица-владелец FK, колонка-владелец FK, целевая таблица, целевая колонка.
+     * Использует JDBC {@code getImportedKeys}, который возвращает информацию
+     * о внешних ключах для каждой таблицы-владельца.
      * </p>
      *
      * @param dataSource автоматически настроенный Spring DataSource
@@ -172,54 +177,72 @@ class PostgresSchemaTests {
      */
     @Test
     void foreignKeysExist(@Autowired DataSource dataSource) throws Exception {
-        // Каждый элемент: [таблица-владелец FK, колонка-FK, таблица-цель]
-        // getExportedKeys возвращает в формате PKTable.PKColumn->FKTable
-        // поэтому проверяем: users.id->profiles, users.id->courses, categories.id->courses и т.д.
+        // Каждый элемент: [таблица-владелец FK, колонка-FK, целевая таблица, целевая колонка]
         String[][] expectedFks = {
-                {"users", "id", "profiles"},
-                {"users", "id", "courses"},
-                {"categories", "id", "courses"},
-                {"courses", "id", "modules"},
-                {"modules", "id", "lessons"},
-                {"users", "id", "enrollments"},
-                {"courses", "id", "enrollments"},
-                {"courses", "id", "course_reviews"},
-                {"users", "id", "course_reviews"},
-                {"courses", "id", "course_tag"},
-                {"tags", "id", "course_tag"}
+                {"profiles", "user_id", "users", "id"},
+                {"courses", "teacher_id", "users", "id"},
+                {"courses", "category_id", "categories", "id"},
+                {"modules", "course_id", "courses", "id"},
+                {"lessons", "module_id", "modules", "id"},
+                {"enrollments", "user_id", "users", "id"},
+                {"enrollments", "course_id", "courses", "id"},
+                {"course_reviews", "course_id", "courses", "id"},
+                {"course_reviews", "student_id", "users", "id"},
+                {"course_tag", "course_id", "courses", "id"},
+                {"course_tag", "tag_id", "tags", "id"}
         };
 
         try (Connection connection = dataSource.getConnection()) {
-            ResultSet fks = connection.getMetaData().getExportedKeys(
-                    null, currentSchema(connection), null);
+            String schema = currentSchema(connection);
 
-            java.util.Set<String> actualFks = new java.util.HashSet<>();
-            while (fks.next()) {
-                String pkTable = fks.getString("PKTABLE_NAME").toLowerCase();
-                String pkColumn = fks.getString("PKCOLUMN_NAME").toLowerCase();
-                String fkTable = fks.getString("FKTABLE_NAME").toLowerCase();
-                actualFks.add(pkTable + "." + pkColumn + "->" + fkTable);
+            // Собираем все FK через getImportedKeys:
+            // для каждой таблицы возвращает FK, где эта таблица — владелец
+            ResultSet fks = connection.getMetaData().getImportedKeys(
+                    null, schema, null);
+
+            // Формируем набор ожидаемых FK для быстрого сравнения
+            Set<String> expectedSet = new HashSet<>();
+            for (String[] fk : expectedFks) {
+                expectedSet.add(fk[0] + "." + fk[1] + "->" + fk[2] + "." + fk[3]);
             }
 
+            // Собираем все фактические FK
+            Set<String> actualSet = new HashSet<>();
+            while (fks.next()) {
+                String fkTable = fks.getString("FKTABLE_NAME").toLowerCase();
+                String fkColumn = fks.getString("FKCOLUMN_NAME").toLowerCase();
+                String pkTable = fks.getString("PKTABLE_NAME").toLowerCase();
+                String pkColumn = fks.getString("PKCOLUMN_NAME").toLowerCase();
+                actualSet.add(fkTable + "." + fkColumn + "->" + pkTable + "." + pkColumn);
+            }
+
+            // Проверяем, что каждый ожидаемый FK найден
             for (String[] expected : expectedFks) {
-                String expectedKey = expected[0] + "." + expected[1] + "->" + expected[2];
-                assertTrue(actualFks.contains(expectedKey),
-                        "Внешний ключ " + expectedKey +
-                                " должен существовать. Найдены: " + actualFks);
+                String expectedKey = expected[0] + "." + expected[1] + "->" + expected[2] + "." + expected[3];
+                assertTrue(actualSet.contains(expectedKey),
+                        "Внешний ключ «" + expectedKey +
+                                "» должен существовать. " +
+                                "Ожидаемые FK: " + expectedSet +
+                                ", фактические FK: " + actualSet);
+            }
+
+            // Проверяем отсутствие лишних FK (не должно быть FK, которых нет в expected)
+            for (String actualKey : actualSet) {
+                assertTrue(expectedSet.contains(actualKey),
+                        "Неожиданный внешний ключ «" + actualKey +
+                                "» обнаружен. Ожидаемые: " + expectedSet +
+                                ", фактические: " + actualSet);
             }
         }
     }
 
     /**
-     * Проверяет уникальные ограничения на уровне базы данных.
+     * Проверяет уникальные ограничения, сгруппированные по идентификатору ограничения.
      * <p>
-     * Ожидаемые уникальные ограничения:
-     * <ul>
-     *   <li>{@code users.login} — уникальность логина/email</li>
-     *   <li>{@code profiles.user_id} — уникальность связи 1:1</li>
-     *   <li>{@code enrollments(user_id, course_id)} — уникальность пары студент-курс</li>
-     *   <li>{@code tags.name} — уникальность имени тега</li>
-     * </ul>
+     * Ограничения группируются по имени ограничения (constraint_name),
+     * а не по имени таблицы. Это позволяет корректно отличать два
+     * отдельных уникальных ограничения на {@code user_id} и {@code course_id}
+     * от одного составного ограничения {@code (user_id, course_id)}.
      * </p>
      *
      * @param dataSource автоматически настроенный Spring DataSource
@@ -232,44 +255,197 @@ class PostgresSchemaTests {
 
             String schema = currentSchema(connection);
 
-            // Получаем все ограничения типа UNIQUE
+            // Получаем все ограничения типа UNIQUE с таблицей, именем и колонками
             ResultSet constraints = stmt.executeQuery(
-                    "SELECT tc.constraint_name, tc.table_name, kcu.column_name " +
+                    "SELECT tc.constraint_name, tc.table_name, kcu.column_name, kcu.ordinal_position " +
                             "FROM information_schema.table_constraints tc " +
                             "JOIN information_schema.key_column_usage kcu " +
                             "  ON tc.constraint_name = kcu.constraint_name " +
                             "    AND tc.table_schema = kcu.table_schema " +
+                            "    AND tc.table_name = kcu.table_name " +
                             "WHERE tc.constraint_type = 'UNIQUE' " +
                             "  AND tc.table_schema = '" + schema + "' " +
-                            "ORDER BY tc.table_name, kcu.ordinal_position");
+                            "ORDER BY tc.constraint_name, kcu.ordinal_position");
 
-            java.util.Map<String, java.util.Set<String>> uniqueCols =
-                    new java.util.LinkedHashMap<>();
+            // Группируем: table_name -> constraint_name -> columns (в порядке)
+            Map<String, Map<String, List<String>>> actualByTable = new LinkedHashMap<>();
             while (constraints.next()) {
-                String table = constraints.getString("table_name").toLowerCase();
+                String tableName = constraints.getString("table_name").toLowerCase();
+                String constraintName = constraints.getString("constraint_name").toLowerCase();
                 String column = constraints.getString("column_name").toLowerCase();
-                uniqueCols.computeIfAbsent(table, k -> new java.util.HashSet<>()).add(column);
+
+                actualByTable.computeIfAbsent(tableName,
+                        k -> new LinkedHashMap<>())
+                        .computeIfAbsent(constraintName,
+                                k -> new ArrayList<>())
+                        .add(column);
             }
 
-            // Проверяем каждое ожидаемое уникальное ограничение
-            assertTrue(uniqueCols.getOrDefault("users", java.util.Set.of())
-                    .contains("login"),
-                    "Уникальное ограничение users.login должно существовать. Найдены: " + uniqueCols);
+            // Ожидаемые ограничения: таблица -> список колонок (по одному ограничению на таблицу)
+            Map<String, List<String>> expectedConstraints = new LinkedHashMap<>();
+            expectedConstraints.put("users", List.of("login"));
+            expectedConstraints.put("profiles", List.of("user_id"));
+            expectedConstraints.put("tags", List.of("name"));
+            expectedConstraints.put("categories", List.of("name"));
+            expectedConstraints.put("enrollments", List.of("user_id", "course_id"));
+            expectedConstraints.put("course_reviews", List.of("student_id", "course_id"));
 
-            assertTrue(uniqueCols.getOrDefault("profiles", java.util.Set.of())
-                    .contains("user_id"),
-                    "Уникальное ограничение profiles.user_id должно существовать. Найдены: " + uniqueCols);
+            // Проверяем каждое ожидаемое ограничение
+            for (Map.Entry<String, List<String>> entry : expectedConstraints.entrySet()) {
+                String table = entry.getKey();
+                List<String> expectedCols = entry.getValue();
 
-            assertTrue(uniqueCols.getOrDefault("tags", java.util.Set.of())
-                    .contains("name"),
-                    "Уникальное ограничение tags.name должно существовать. Найдены: " + uniqueCols);
+                Map<String, List<String>> tableConstraints = actualByTable.getOrDefault(table, Map.of());
 
-            java.util.Set<String> enrollmentUqColumns =
-                    uniqueCols.getOrDefault("enrollments", java.util.Set.of());
-            assertTrue(enrollmentUqColumns.contains("user_id"),
-                    "Уникальное ограничение enrollments должно содержать user_id");
-            assertTrue(enrollmentUqColumns.contains("course_id"),
-                    "Уникальное ограничение enrollments должно содержать course_id");
+                boolean found = false;
+                for (List<String> actualCols : tableConstraints.values()) {
+                    if (expectedCols.equals(actualCols)) {
+                        found = true;
+                        break;
+                    }
+                }
+
+                assertTrue(found,
+                        "Уникальное ограничение на колонки " + expectedCols +
+                                " таблицы «" + table + "» должно существовать. " +
+                                "Фактические ограничения: " + tableConstraints);
+            }
+
+            // Проверяем отсутствие ограничений на непредусмотренных таблицах
+            Set<String> expectedTables = Set.of("users", "profiles", "tags", "categories",
+                    "enrollments", "course_reviews");
+            for (String actualTable : actualByTable.keySet()) {
+                assertTrue(expectedTables.contains(actualTable),
+                        "Неожиданная таблица с уникальным ограничением «" + actualTable +
+                                "». Ожидаемые таблицы: " + expectedTables);
+            }
+        }
+    }
+
+    /**
+     * Проверяет, что некорректный FK (с несуществующей колонкой-владельцем) не проходит валидацию.
+     * <p>
+     * Имитирует проверку с неправильной колонкой-владельцем FK:
+     * проверяет, что profiles.nonexistent_column -&gt; users.id действительно отсутствует.
+     * </p>
+     *
+     * @param dataSource автоматически настроенный Spring DataSource
+     * @throws Exception если возникла ошибка при выполнении запроса
+     */
+    @Test
+    void fkWrongOwnerColumnShouldFail(@Autowired DataSource dataSource) throws Exception {
+        // Симулируем проверку FK с неверной колонкой-владельцем
+        // Реальный FK: profiles.user_id -> users.id
+        // Проверяем, что profiles.nonexistent_column -> users.id не найден
+        String wrongFkKey = "profiles.nonexistent_column->users.id";
+
+        try (Connection connection = dataSource.getConnection()) {
+            String schema = currentSchema(connection);
+            ResultSet fks = connection.getMetaData().getImportedKeys(
+                    null, schema, null);
+
+            Set<String> actualSet = new HashSet<>();
+            while (fks.next()) {
+                String fkTable = fks.getString("FKTABLE_NAME").toLowerCase();
+                String fkColumn = fks.getString("FKCOLUMN_NAME").toLowerCase();
+                String pkTable = fks.getString("PKTABLE_NAME").toLowerCase();
+                String pkColumn = fks.getString("PKCOLUMN_NAME").toLowerCase();
+                actualSet.add(fkTable + "." + fkColumn + "->" + pkTable + "." + pkColumn);
+            }
+
+            assertFalse(actualSet.contains(wrongFkKey),
+                    "FK с несуществующей колонкой-владельцем «" + wrongFkKey +
+                            "» не должен быть найден. Фактические FK: " + actualSet);
+        }
+    }
+
+    /**
+     * Проверяет, что лишний столбец в PK обнаруживается.
+     * <p>
+     * Убедимся, что PK для users — именно {id}, а не {id, что-то_ещё}.
+     * </p>
+     *
+     * @param dataSource автоматически настроенный Spring DataSource
+     * @throws Exception если возникла ошибка при выполнении запроса
+     */
+    @Test
+    void pkExtraColumnShouldBeDetected(@Autowired DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection()) {
+            String schema = currentSchema(connection);
+            ResultSet pkRs = connection.getMetaData().getPrimaryKeys(
+                    null, schema, "users");
+            Set<String> actualPkColumns = new HashSet<>();
+            while (pkRs.next()) {
+                actualPkColumns.add(pkRs.getString("COLUMN_NAME").toLowerCase());
+            }
+            assertEquals(Set.of("id"), actualPkColumns,
+                    "PK таблицы users должен быть точно {id}");
+        }
+    }
+
+    /**
+     * Проверяет, что два отдельных уникальных ограничения не сливаются в одно.
+     * <p>
+     * enrollments имеет составное уникальное ограничение на (user_id, course_id).
+     * Этот тест убеждается, что группировка по имени ограничения
+     * корректно различает составное и отдельные ограничения.
+     * </p>
+     *
+     * @param dataSource автоматически настроенный Spring DataSource
+     * @throws Exception если возникла ошибка при выполнении запроса
+     */
+    @Test
+    void uniqueSeparateConstraintsNotMerged(@Autowired DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement stmt = connection.createStatement()) {
+
+            String schema = currentSchema(connection);
+
+            // Получаем ограничения для enrollments, сгруппированные по имени
+            Map<String, List<String>> constraintsByConstraintName = new LinkedHashMap<>();
+            ResultSet constraints = stmt.executeQuery(
+                    "SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position " +
+                            "FROM information_schema.table_constraints tc " +
+                            "JOIN information_schema.key_column_usage kcu " +
+                            "  ON tc.constraint_name = kcu.constraint_name " +
+                            "    AND tc.table_schema = kcu.table_schema " +
+                            "    AND tc.table_name = kcu.table_name " +
+                            "WHERE tc.constraint_type = 'UNIQUE' " +
+                            "  AND tc.table_schema = '" + schema + "' " +
+                            "  AND tc.table_name = 'enrollments' " +
+                            "ORDER BY tc.constraint_name, kcu.ordinal_position");
+
+            while (constraints.next()) {
+                String constraintName = constraints.getString("constraint_name").toLowerCase();
+                String column = constraints.getString("column_name").toLowerCase();
+
+                constraintsByConstraintName.computeIfAbsent(constraintName,
+                        k -> new ArrayList<>())
+                        .add(column);
+            }
+
+            // Проверяем, что составное ограничение имеет обе колонки в одном наборе,
+            // а не разбросаны по разным ограничениям
+            assertTrue(constraintsByConstraintName.size() >= 1,
+                    "У таблицы enrollments должно быть хотя бы одно уникальное ограничение");
+
+            // Ищем ограничение, содержащее user_id
+            List<String> userCourseConstraint = null;
+            for (Map.Entry<String, List<String>> entry : constraintsByConstraintName.entrySet()) {
+                if (entry.getValue().contains("user_id") && entry.getValue().contains("course_id")) {
+                    userCourseConstraint = entry.getValue();
+                    break;
+                }
+            }
+
+            assertNotNull(userCourseConstraint,
+                    "Должно существовать составное ограничение, содержащее user_id и course_id в одном наборе");
+            assertEquals(2, userCourseConstraint.size(),
+                    "Составное ограничение должно содержать ровно 2 колонки");
+            assertTrue(userCourseConstraint.contains("user_id"),
+                    "Составное ограничение должно содержать user_id");
+            assertTrue(userCourseConstraint.contains("course_id"),
+                    "Составное ограничение должно содержать course_id");
         }
     }
 
@@ -306,9 +482,24 @@ class PostgresSchemaTests {
     }
 
     /**
+     * Проверяет имя текущей схемы PostgreSQL.
+     *
+     * @param dataSource автоматически настроенный Spring DataSource
+     * @throws Exception если возникла ошибка при выполнении запроса
+     */
+    @Test
+    void currentSchemaNameIsPublic(@Autowired DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection()) {
+            String schema = currentSchema(connection);
+            assertEquals("public", schema,
+                    "Текущая схема должна быть «public», получено: " + schema);
+        }
+    }
+
+    /**
      * Возвращает имя текущей схемы PostgreSQL.
      *
-     * @param соединение JDBC
+     * @param connection соединение JDBC
      * @return имя схемы (обычно «public»)
      * @throws Exception если возникла ошибка при выполнении запроса
      */

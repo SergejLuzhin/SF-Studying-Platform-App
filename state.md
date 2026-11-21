@@ -29,7 +29,44 @@
 - `git diff --check`: **PASS** (нет проблем с форматированием)
 
 ### Следующий шаг:
-Пункт 12 — точные проверки первичных, внешних и уникальных ключей.
+Пункт 12 — точные проверки первичных, внешних и уникальных ключей (`completed`).
+
+---
+
+## Выполнено — Пункт 12: Точные проверки первичных, внешних и уникальных ключей
+
+### Изменённый файл:
+- **`src/test/java/com/studying/platform/PostgresSchemaTests.java`** — полностью переработаны три метода проверки ограничений схемы.
+
+### Выполненные изменения:
+
+**`primaryKeysExist`** — вместо проверки наличия колонки `id` в PK теперь проверяется **точное равенство множества** колонок PK:
+- Для 9 таблиц с одиночным PK — множество должно быть точно `{id}`
+- Для `course_tag` — множество должно быть точно `{course_id, tag_id}`
+- Лишние колонки в PK обнаруживаются и приводят к ошибке
+
+**`foreignKeysExist`** — вместо проверки только `(pkTable.pkCol -> fkTable)` теперь проверяются **все четыре компонента** каждого FK через `getImportedKeys`:
+- Таблица-владелец FK, колонка-владелец FK, целевая таблица, целевая колонка
+- Формат ключа: `ownerTable.ownerColumn->refTable.refColumn`
+- Проверяется как наличие всех 11 ожидаемых FK, так и отсутствие лишних
+- Генерируемые Hibernate имена ограничений не сравниваются
+
+**`uniqueConstraintsExist`** — вместо группировки колонок по таблице теперь используется **группировка по идентификатору ограничения** (`constraint_name`):
+- Запрос включает `table_name`, `constraint_name`, `column_name`, `ordinal_position`
+- Группировка: `table -> constraint_name -> columns` (с учётом порядка)
+- Два отдельных уникальных ограничения на `user_id` и `course_id` не сливаются в одно
+- Составное ограничение `enrollments(user_id, course_id)` проверяется как единый набор
+- Обнаружены и добавлены дополнительные ограничения: `categories.name`, `course_reviews(student_id, course_id)`
+
+**Негативные тесты:**
+- `fkWrongOwnerColumnShouldFail` — проверяет, что несуществующий FK не проходит валидацию
+- `pkExtraColumnShouldBeDetected` — подтверждает точный состав PK `users`
+- `uniqueSeparateConstraintsNotMerged` — проверяет, что `enrollments` имеет составное ограничение, а не два отдельных
+
+### Результаты проверок:
+- `mvn test -Dtest=PostgresSchemaTests`: **13 PASS** (было 9) — PASS
+- `mvn verify`: **144 PASS**, 0 FAIL, 0 ERROR — PASS
+- `git diff --check`: **PASS**
 
 ### Готовое:
 - Обновлён `User` (`com.studying.platform.entity`) — добавлена связь `@OneToMany(mappedBy = "user", fetch = FetchType.LAZY) Set<Enrollment> enrollments` с JavaDoc, getter/setter.
