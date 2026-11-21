@@ -8,7 +8,6 @@ import com.studying.platform.repository.CategoryRepository;
 import com.studying.platform.repository.CourseRepository;
 import com.studying.platform.repository.UserRepository;
 import jakarta.persistence.EntityManager;
-import org.hibernate.PropertyValueException;
 import org.hibernate.TransientPropertyValueException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -80,7 +79,7 @@ class CategoryAndCourseTests {
     @Test
     void saveCategoryAndCourse_shouldPersistAndRetrieve() {
         // Создание преподавателя
-        User teacher = new User("teacher@example.com", "securepass", UserRole.TEACHER);
+        User teacher = new User("teacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -125,7 +124,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void findByTitle_shouldReturnCourse() {
-        User teacher = new User("findteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("findteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -167,7 +166,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void updateCourse_shouldChangeData() {
-        User teacher = new User("updateteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("updateteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -204,7 +203,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void deleteCourse_shouldRemoveFromDatabase() {
-        User teacher = new User("deleteteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("deleteteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -237,7 +236,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void saveCourse_nullTitle_shouldThrow() {
-        User teacher = new User("nulltitle@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("nulltitle@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -248,10 +247,10 @@ class CategoryAndCourseTests {
         Course course = new Course(null, "Описание", 20,
                 LocalDate.of(2026, 9, 1), teacher, category);
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(course);
             entityManager.flush();
-        }, "Сохранение курса с null названием должно вызвать ошибку значения свойства");
+        }, "Сохранение курса с null названием должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -263,7 +262,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void saveCourse_nullStartDate_shouldThrow() {
-        User teacher = new User("nulldate@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("nulldate@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -274,10 +273,10 @@ class CategoryAndCourseTests {
         Course course = new Course("Курс", "Описание", 20,
                 null, teacher, category);
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(course);
             entityManager.flush();
-        }, "Сохранение курса с null датой начала должно вызвать ошибку значения свойства");
+        }, "Сохранение курса с null датой начала должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -296,10 +295,10 @@ class CategoryAndCourseTests {
         Course course = new Course("Курс", "Описание", 20,
                 LocalDate.of(2026, 9, 1), null, category);
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(course);
             entityManager.flush();
-        }, "Сохранение курса без преподавателя должно вызвать ошибку значения свойства");
+        }, "Сохранение курса без преподавателя должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -311,17 +310,17 @@ class CategoryAndCourseTests {
      */
     @Test
     void saveCourse_nullCategory_shouldThrow() {
-        User teacher = new User("nullcategory@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("nullcategory@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
         Course course = new Course("Курс", "Описание", 20,
                 LocalDate.of(2026, 9, 1), teacher, null);
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(course);
             entityManager.flush();
-        }, "Сохранение курса без категории должно вызвать ошибку значения свойства");
+        }, "Сохранение курса без категории должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -358,7 +357,7 @@ class CategoryAndCourseTests {
         entityManager.persist(category);
         entityManager.flush();
 
-        User detachedTeacher = new User("ghost@example.com", "pass", UserRole.TEACHER);
+        User detachedTeacher = new User("ghost@example.com", UserRole.TEACHER);
         // Преподаватель не сохраняется — остаётся «призрачным»
 
         Course course = new Course("Курс с призраком", "Описание", 20,
@@ -381,7 +380,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void saveCourse_nonExistentCategory_shouldThrow() {
-        User teacher = new User("ghostteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("ghostteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -408,7 +407,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void loadCourse_shouldFetchCategory() {
-        User teacher = new User("catfetch@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("catfetch@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -436,7 +435,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void loadCourse_teacherReference() {
-        User teacher = new User("teacherref@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("teacherref@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -452,7 +451,7 @@ class CategoryAndCourseTests {
         // Загрузка курса
         Course loaded = courseRepository.findById(course.getId()).orElseThrow();
         assertNotNull(loaded.getTeacher(), "Преподаватель курса должен быть доступен");
-        assertEquals("teacherref@example.com", loaded.getTeacher().getLogin());
+        assertEquals("teacherref@example.com", loaded.getTeacher().getEmail());
         assertEquals(UserRole.TEACHER, loaded.getTeacher().getRole());
     }
 
@@ -465,7 +464,7 @@ class CategoryAndCourseTests {
      */
     @Test
     void saveCategoryWithCourses_shouldPersistCourse() {
-        User teacher = new User("categoryteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("categoryteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 

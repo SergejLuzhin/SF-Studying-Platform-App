@@ -11,6 +11,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -21,8 +25,9 @@ import com.studying.platform.entity.Enrollment;
  * Сущность «Пользователь» учебной платформы.
  * <p>
  * Представляет участника системы: студента, преподавателя или администратора.
- * Содержит уникальный логин, хеш пароля и роль. Связан с профилем
- * через отношение «один-к-одному», которое загружается лениво.
+ * Содержит уникальный адрес электронной почты (физически хранится в колонке
+ * {@code users.login} для обратной совместимости), роль и необязательный профиль.
+ * Связан с профилем через отношение «один-к-одному», которое загружается лениво.
  * </p>
  */
 @Entity
@@ -37,22 +42,21 @@ public class User {
     private Long id;
 
     /**
-     * Уникальный логин (адрес электронной почты) пользователя.
+     * Адрес электронной почты пользователя. Уникальный и обязательный для заполнения.
+     * Физическое имя колонки в базе данных — {@code login} (для сохранения
+     * обратной совместимости с существующей схемой).
      */
-    @Column(nullable = false, unique = true, length = 50)
-    private String login;
-
-    /**
-     * Хеш пароля пользователя.
-     * В текущей реализации сохраняется как строка без хеширования.
-     */
-    @Column(nullable = false, length = 255)
-    private String password;
+    @NotBlank(message = "Адрес электронной почты не может быть пустым")
+    @Email(message = "Адрес электронной почты должен быть корректным")
+    @Size(max = 50, message = "Адрес электронной почты не должен превышать 50 символов")
+    @Column(name = "login", nullable = false, unique = true, length = 50)
+    private String email;
 
     /**
      * Роль пользователя в системе.
      * Может принимать значения: STUDENT, TEACHER, ADMIN.
      */
+    @NotNull(message = "Роль пользователя не может быть null")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;
@@ -80,13 +84,11 @@ public class User {
     /**
      * Создаёт нового пользователя с заданными параметрами.
      *
-     * @param login    уникальный логин пользователя
-     * @param password хеш пароля
-     * @param role     роль пользователя
+     * @param email уникальный адрес электронной почты пользователя
+     * @param role  роль пользователя
      */
-    public User(String login, String password, UserRole role) {
-        this.login = login;
-        this.password = password;
+    public User(String email, UserRole role) {
+        this.email = email;
         this.role = role;
     }
 
@@ -109,39 +111,21 @@ public class User {
     }
 
     /**
-     * Возвращает уникальный логин пользователя.
+     * Возвращает адрес электронной почты пользователя.
      *
-     * @return логин
+     * @return адрес электронной почты
      */
-    public String getLogin() {
-        return login;
+    public String getEmail() {
+        return email;
     }
 
     /**
-     * Устанавливает уникальный логин пользователя.
+     * Устанавливает адрес электронной почты пользователя.
      *
-     * @param login логин
+     * @param email адрес электронной почты
      */
-    public void setLogin(String login) {
-        this.login = login;
-    }
-
-    /**
-     * Возвращает хеш пароля пользователя.
-     *
-     * @return хеш пароля
-     */
-    public String getPassword() {
-        return password;
-    }
-
-    /**
-     * Устанавливает хеш пароля пользователя.
-     *
-     * @param password хеш пароля
-     */
-    public void setPassword(String password) {
-        this.password = password;
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     /**

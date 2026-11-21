@@ -6,7 +6,6 @@ import com.studying.platform.entity.UserRole;
 import com.studying.platform.repository.ProfileRepository;
 import com.studying.platform.repository.UserRepository;
 import jakarta.persistence.EntityManager;
-import org.hibernate.PropertyValueException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,7 +69,7 @@ class UserAndProfileTests {
     @Test
     void saveUserWithProfile_shouldPersistAndRetrieve() {
         // Создание пользователя
-        User user = new User("alice@example.com", "password123", UserRole.STUDENT);
+        User user = new User("alice@example.com", UserRole.STUDENT);
         entityManager.persist(user);
         entityManager.flush();
 
@@ -97,63 +96,62 @@ class UserAndProfileTests {
 
         // Чтение пользователя по ID
         User savedUser = userRepository.findById(userId).orElseThrow();
-        assertEquals("alice@example.com", savedUser.getLogin());
-        assertEquals("password123", savedUser.getPassword());
+        assertEquals("alice@example.com", savedUser.getEmail());
         assertEquals(UserRole.STUDENT, savedUser.getRole());
     }
 
     /**
-     * Проверка: поиск пользователя по логину.
+     * Проверка: поиск пользователя по адресу электронной почты.
      * <p>
-     * После сохранения пользователя проверяет, что метод {@code findByLogin}
+     * После сохранения пользователя проверяет, что метод {@code findByEmail}
      * возвращает корректный результат.
      * </p>
      */
     @Test
-    void findByLogin_shouldReturnUser() {
-        User user = new User("bob@example.com", "securepass", UserRole.TEACHER);
+    void findByEmail_shouldReturnUser() {
+        User user = new User("bob@example.com", UserRole.TEACHER);
         entityManager.persist(user);
         entityManager.flush();
 
         // Поиск по логину
-        var found = userRepository.findByLogin("bob@example.com");
-        assertTrue(found.isPresent(), "Пользователь с логином bob@example.com должен быть найден");
+        var found = userRepository.findByEmail("bob@example.com");
+        assertTrue(found.isPresent(), "Пользователь с email bob@example.com должен быть найден");
         assertEquals(UserRole.TEACHER, found.get().getRole());
     }
 
     /**
-     * Проверка: поиск пользователя по несуществующему логину.
+     * Проверка: поиск пользователя по несуществующему адресу электронной почты.
      * <p>
-     * Гарантирует, что метод {@code findByLogin} возвращает пустое значение
-     * для отсутствующего логина.
+     * Гарантирует, что метод {@code findByEmail} возвращает пустое значение
+     * для отсутствующего адреса.
      * </p>
      */
     @Test
-    void findByLogin_shouldReturnEmptyForNonExistentLogin() {
-        var found = userRepository.findByLogin("nonexistent@example.com");
-        assertTrue(found.isEmpty(), "Пользователь с несуществующим логином не должен быть найден");
+    void findByEmail_shouldReturnEmptyForNonExistentEmail() {
+        var found = userRepository.findByEmail("nonexistent@example.com");
+        assertTrue(found.isEmpty(), "Пользователь с несуществующим email не должен быть найден");
     }
 
     /**
-     * Проверка: уникальность логина пользователя.
+     * Проверка: уникальность адреса электронной почты пользователя.
      * <p>
-     * Пытается сохранить двух пользователей с одинаковым логином
+     * Пытается сохранить двух пользователей с одинаковым email
      * и проверяет, что база данных выбрасывает исключение о нарушении целостности данных.
      * </p>
      */
     @Test
-    void saveUser_duplicateLogin_shouldThrowDataIntegrityViolation() {
-        User user1 = new User("unique@example.com", "pass1", UserRole.STUDENT);
+    void saveUser_duplicateEmail_shouldThrowDataIntegrityViolation() {
+        User user1 = new User("unique@example.com", UserRole.STUDENT);
         entityManager.persist(user1);
         entityManager.flush();
 
-        User user2 = new User("unique@example.com", "pass2", UserRole.TEACHER);
+        User user2 = new User("unique@example.com", UserRole.TEACHER);
 
-        // Ожидается: нарушение уникального ограничения логина
+        // Ожидается: нарушение уникального ограничения email
         assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(user2);
             entityManager.flush();
-        }, "Сохранение пользователя с дублирующим логином должно вызвать нарушение целостности данных");
+        }, "Сохранение пользователя с дублирующим email должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -165,16 +163,16 @@ class UserAndProfileTests {
      */
     @Test
     void saveProfile_nullDisplayName_shouldThrow() {
-        User user = new User("noread@example.com", "pass", UserRole.STUDENT);
+        User user = new User("noread@example.com", UserRole.STUDENT);
         entityManager.persist(user);
         entityManager.flush();
 
         Profile profile = new Profile(user, null);
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(profile);
             entityManager.flush();
-        }, "Сохранение профиля с null displayName должно вызвать ошибку значения свойства");
+        }, "Сохранение профиля с null displayName должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -188,10 +186,10 @@ class UserAndProfileTests {
     void saveProfile_nullUser_shouldThrow() {
         Profile profile = new Profile(null, "Иван Петров");
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(profile);
             entityManager.flush();
-        }, "Сохранение профиля без пользователя должно вызвать ошибку значения свойства");
+        }, "Сохранение профиля без пользователя должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -203,7 +201,7 @@ class UserAndProfileTests {
      */
     @Test
     void saveProfile_multipleForSameUser_shouldThrow() {
-        User user = new User("twoprofile@example.com", "pass", UserRole.STUDENT);
+        User user = new User("twoprofile@example.com", UserRole.STUDENT);
         entityManager.persist(user);
         entityManager.flush();
 
@@ -228,7 +226,7 @@ class UserAndProfileTests {
      */
     @Test
     void loadProfile_shouldHaveUserReference() {
-        User user = new User("reflink@example.com", "pass", UserRole.ADMIN);
+        User user = new User("reflink@example.com", UserRole.ADMIN);
         entityManager.persist(user);
         entityManager.flush();
 
@@ -240,7 +238,7 @@ class UserAndProfileTests {
         // Загрузка профиля
         Profile loaded = profileRepository.findById(profile.getId()).orElseThrow();
         assertNotNull(loaded.getUser(), "Профиль должен содержать ссылку на пользователя");
-        assertEquals("reflink@example.com", loaded.getUser().getLogin());
+        assertEquals("reflink@example.com", loaded.getUser().getEmail());
         assertEquals(UserRole.ADMIN, loaded.getUser().getRole());
         assertEquals("Администратор", loaded.getDisplayName());
     }
@@ -254,7 +252,7 @@ class UserAndProfileTests {
      */
     @Test
     void updateProfile_shouldChangeData() {
-        User user = new User("update@example.com", "pass", UserRole.STUDENT);
+        User user = new User("update@example.com", UserRole.STUDENT);
         entityManager.persist(user);
         entityManager.flush();
 
@@ -284,7 +282,7 @@ class UserAndProfileTests {
      */
     @Test
     void deleteProfile_shouldRemoveFromDatabase() {
-        User user = new User("delete@example.com", "pass", UserRole.TEACHER);
+        User user = new User("delete@example.com", UserRole.TEACHER);
         entityManager.persist(user);
         entityManager.flush();
 
@@ -312,7 +310,7 @@ class UserAndProfileTests {
      */
     @Test
     void findByUserId_shouldReturnProfile() {
-        User user = new User("userid@example.com", "pass", UserRole.STUDENT);
+        User user = new User("userid@example.com", UserRole.STUDENT);
         entityManager.persist(user);
         entityManager.flush();
 
@@ -323,6 +321,139 @@ class UserAndProfileTests {
         var found = profileRepository.findByUserId(user.getId());
         assertTrue(found.isPresent(), "Профиль по ID пользователя должен быть найден");
         assertEquals("Поиск по ID", found.get().getDisplayName());
+    }
+
+    /**
+     * Проверка: сохранение и повторное чтение пользователя и профиля после очистки контекста.
+     * <p>
+     * Сохраняет пользователя и профиль, выполняет flush, запоминает ID,
+     * вызывает clear для очистки контекста Hibernate, затем повторно загружает
+     * ambos объекта из базы данных и проверяет email, роль и имя профиля.
+     * </p>
+     */
+    @Test
+    void saveUserWithProfile_shouldPersistAndRetrieveAfterClear() {
+        // Создание пользователя
+        User user = new User("flushuser@example.com", UserRole.STUDENT);
+        entityManager.persist(user);
+        entityManager.flush();
+
+        Long userId = user.getId();
+
+        // Создание профиля
+        Profile profile = new Profile(user, "Флеш Алиса");
+        profile.setBio("Проверяет flush/clear.");
+        entityManager.persist(profile);
+        entityManager.flush();
+
+        Long profileId = profile.getId();
+
+        // Очистка контекста — все managed-объекты становятся detached
+        entityManager.clear();
+
+        // Повторное чтение из базы данных
+        User loadedUser = userRepository.findById(userId).orElseThrow();
+        assertEquals("flushuser@example.com", loadedUser.getEmail());
+        assertEquals(UserRole.STUDENT, loadedUser.getRole());
+        // @OneToOne с mappedBy и owning-стороной @JoinColumn(unique=true)
+        // использует Hibernate-оптимизацию и загружает профиль eagerly.
+        assertNotNull(loadedUser.getProfile(),
+                "@OneToOne с mappedBy загружает профиль по оптимизации Hibernate");
+
+        Profile loadedProfile = profileRepository.findById(profileId).orElseThrow();
+        assertEquals("Флеш Алиса", loadedProfile.getDisplayName());
+        assertEquals("Проверяет flush/clear.", loadedProfile.getBio());
+        assertEquals("flushuser@example.com", loadedProfile.getUser().getEmail());
+    }
+
+    /**
+     * Проверка: null email отклоняется валидатором.
+     */
+    @Test
+    void saveUser_nullEmail_shouldThrow() {
+        assertThrows(jakarta.validation.ConstraintViolationException.class, () -> {
+            User user = new User((String) null, UserRole.STUDENT);
+            entityManager.persist(user);
+            entityManager.flush();
+        }, "Сохранение пользователя с null email должно вызвать ошибку валидации");
+    }
+
+    /**
+     * Проверка: пустой email отклоняется валидатором.
+     */
+    @Test
+    void saveUser_emptyEmail_shouldThrow() {
+        assertThrows(jakarta.validation.ConstraintViolationException.class, () -> {
+            User user = new User("", UserRole.STUDENT);
+            entityManager.persist(user);
+            entityManager.flush();
+        }, "Сохранение пользователя с пустым email должно вызвать ошибку валидации");
+    }
+
+    /**
+     * Проверка: пробельный email отклоняется валидатором.
+     */
+    @Test
+    void saveUser_whitespaceEmail_shouldThrow() {
+        assertThrows(jakarta.validation.ConstraintViolationException.class, () -> {
+            User user = new User("   ", UserRole.STUDENT);
+            entityManager.persist(user);
+            entityManager.flush();
+        }, "Сохранение пользователя с пробельным email должно вызвать ошибку валидации");
+    }
+
+    /**
+     * Проверка: некорректный email (без @) отклоняется валидатором.
+     */
+    @Test
+    void saveUser_invalidEmailFormat_shouldThrow() {
+        assertThrows(jakarta.validation.ConstraintViolationException.class, () -> {
+            User user = new User("invalid-email-format", UserRole.STUDENT);
+            entityManager.persist(user);
+            entityManager.flush();
+        }, "Сохранение пользователя с некорректным email должно вызвать ошибку валидации");
+    }
+
+    /**
+     * Проверка: email длиннее 50 символов отклоняется валидатором.
+     */
+    @Test
+    void saveUser_tooLongEmail_shouldThrow() {
+        String longEmail = "a".repeat(51) + "@example.com";
+        assertThrows(jakarta.validation.ConstraintViolationException.class, () -> {
+            User user = new User(longEmail, UserRole.STUDENT);
+            entityManager.persist(user);
+            entityManager.flush();
+        }, "Сохранение пользователя с email длиннее 50 символов должно вызвать ошибку валидации");
+    }
+
+    /**
+     * Проверка: null роль отклоняется валидатором (@NotNull).
+     */
+    @Test
+    void saveUser_nullRole_shouldThrow() {
+        assertThrows(jakarta.validation.ConstraintViolationException.class, () -> {
+            User user = new User("roleuser@example.com", null);
+            entityManager.persist(user);
+            entityManager.flush();
+        }, "Сохранение пользователя с null ролью должно вызвать ошибку валидации");
+    }
+
+    /**
+     * Проверка: корректный email сохраняется и читается.
+     */
+    @Test
+    void saveUser_validEmail_shouldPersistAndRetrieve() {
+        User user = new User("valid@example.com", UserRole.TEACHER);
+        entityManager.persist(user);
+        entityManager.flush();
+
+        Long userId = user.getId();
+        entityManager.clear();
+
+        User loaded = userRepository.findById(userId).orElseThrow();
+        assertEquals("valid@example.com", loaded.getEmail());
+        assertEquals(UserRole.TEACHER, loaded.getRole());
     }
 
     /**

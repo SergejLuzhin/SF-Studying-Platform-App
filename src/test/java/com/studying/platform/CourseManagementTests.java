@@ -122,11 +122,11 @@ class CourseManagementTests {
     /**
      * Создаёт и сохраняет тестового преподавателя.
      *
-     * @param login логин преподавателя
+     * @param email email преподавателя
      * @return сохранённый пользователь с ролью TEACHER
      */
-    private User createTeacher(String login) {
-        User user = new User(login, "password123", UserRole.TEACHER);
+    private User createTeacher(String email) {
+        User user = new User(email, UserRole.TEACHER);
         entityManager.persist(user);
         entityManager.flush();
         return user;
@@ -135,11 +135,11 @@ class CourseManagementTests {
     /**
      * Создаёт и сохраняет тестового студента.
      *
-     * @param login логин студента
+     * @param email email студента
      * @return сохранённый пользователь с ролью STUDENT
      */
-    private User createStudent(String login) {
-        User user = new User(login, "password123", UserRole.STUDENT);
+    private User createStudent(String email) {
+        User user = new User(email, UserRole.STUDENT);
         entityManager.persist(user);
         entityManager.flush();
         return user;

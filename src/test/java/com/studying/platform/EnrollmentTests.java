@@ -101,7 +101,7 @@ class EnrollmentTests {
     @Test
     void enrollStudent_shouldCreateActiveRecord() {
         // Подготовка: преподаватель и курс
-        User teacher = new User("teachertest@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("teachertest@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -115,7 +115,7 @@ class EnrollmentTests {
         entityManager.flush();
 
         // Подготовка: студент
-        User student = new User("studenttest@example.com", "pass", UserRole.STUDENT);
+        User student = new User("studenttest@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -148,7 +148,7 @@ class EnrollmentTests {
     @Test
     void dropEnrollment_shouldMarkAsDropped() {
         // Подготовка
-        User teacher = new User("dropteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("dropteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -161,7 +161,7 @@ class EnrollmentTests {
         entityManager.persist(course);
         entityManager.flush();
 
-        User student = new User("dropstudent@example.com", "pass", UserRole.STUDENT);
+        User student = new User("dropstudent@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -198,7 +198,7 @@ class EnrollmentTests {
     @Test
     void getStudentCourses_shouldReturnActiveCourses() {
         // Подготовка: преподаватель и категории
-        User teacher = new User("coursesstudentteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("coursesstudentteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -221,7 +221,7 @@ class EnrollmentTests {
         entityManager.flush();
 
         // Студент
-        User student = new User("coursesstudent@example.com", "pass", UserRole.STUDENT);
+        User student = new User("coursesstudent@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -251,7 +251,7 @@ class EnrollmentTests {
     @Test
     void getCourseStudents_shouldReturnActiveStudents() {
         // Подготовка: преподаватель и курс
-        User teacher = new User("coursesstudentteacher2@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("coursesstudentteacher2@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -265,15 +265,15 @@ class EnrollmentTests {
         entityManager.flush();
 
         // Студенты
-        User student1 = new User("student1@example.com", "pass", UserRole.STUDENT);
+        User student1 = new User("student1@example.com", UserRole.STUDENT);
         entityManager.persist(student1);
         entityManager.flush();
 
-        User student2 = new User("student2@example.com", "pass", UserRole.STUDENT);
+        User student2 = new User("student2@example.com", UserRole.STUDENT);
         entityManager.persist(student2);
         entityManager.flush();
 
-        User student3 = new User("student3@example.com", "pass", UserRole.STUDENT);
+        User student3 = new User("student3@example.com", UserRole.STUDENT);
         entityManager.persist(student3);
         entityManager.flush();
 
@@ -306,7 +306,7 @@ class EnrollmentTests {
     @Test
     void enrollStudent_withTeacher_shouldThrow() {
         // Подготовка: преподаватель
-        User teacher = new User("enrollteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("enrollteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -335,7 +335,7 @@ class EnrollmentTests {
     @Test
     void enrollStudent_duplicate_shouldThrow() {
         // Подготовка
-        User teacher = new User("dupeteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("dupeteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -348,7 +348,7 @@ class EnrollmentTests {
         entityManager.persist(course);
         entityManager.flush();
 
-        User student = new User("dupestudent@example.com", "pass", UserRole.STUDENT);
+        User student = new User("dupestudent@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -371,7 +371,7 @@ class EnrollmentTests {
     @Test
     void dropEnrollment_nonExistent_shouldThrow() {
         // Подготовка
-        User teacher = new User("dropteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("dropteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -384,7 +384,7 @@ class EnrollmentTests {
         entityManager.persist(course);
         entityManager.flush();
 
-        User student = new User("dropstudent@example.com", "pass", UserRole.STUDENT);
+        User student = new User("dropstudent@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -404,7 +404,7 @@ class EnrollmentTests {
     @Test
     void enrollStudent_nonExistentStudent_shouldThrow() {
         // Подготовка: курс
-        User teacher = new User("nonexistteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("nonexistteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -433,7 +433,7 @@ class EnrollmentTests {
     @Test
     void enrollStudent_nonExistentCourse_shouldThrow() {
         // Подготовка: студент
-        User student = new User("nonexiststudent@example.com", "pass", UserRole.STUDENT);
+        User student = new User("nonexiststudent@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -453,7 +453,7 @@ class EnrollmentTests {
     @Test
     void getEnrollmentStatus_shouldReturnCorrectStatus() {
         // Подготовка
-        User teacher = new User("statusteacher@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("statusteacher@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 
@@ -466,7 +466,7 @@ class EnrollmentTests {
         entityManager.persist(course);
         entityManager.flush();
 
-        User student = new User("statusstudent@example.com", "pass", UserRole.STUDENT);
+        User student = new User("statusstudent@example.com", UserRole.STUDENT);
         entityManager.persist(student);
         entityManager.flush();
 
@@ -500,11 +500,11 @@ class EnrollmentTests {
     @Test
     void enrollStudent_withAdmin_shouldThrow() {
         // Подготовка: администратор и курс
-        User admin = new User("admintest@example.com", "pass", UserRole.ADMIN);
+        User admin = new User("admintest@example.com", UserRole.ADMIN);
         entityManager.persist(admin);
         entityManager.flush();
 
-        User teacher = new User("adminteacher2@example.com", "pass", UserRole.TEACHER);
+        User teacher = new User("adminteacher2@example.com", UserRole.TEACHER);
         entityManager.persist(teacher);
         entityManager.flush();
 

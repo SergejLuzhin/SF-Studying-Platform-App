@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 2 плана исправлений: Проверить реальное создание схемы** (`completed`)
+**Пункт 3 плана исправлений: Привести пользователя к согласованной модели** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -26,12 +26,6 @@
 ### Результаты проверок:
 - `git diff --check`: PASS (нет проблем с форматированием)
 - `mvn test`: 69 тестов PASS, 0 FAIL, 0 ERROR
-  - EnrollmentTests: 11 PASS (новые)
-  - CategoryAndCourseTests: 15 PASS
-  - ModuleAndLessonTests: 16 PASS
-  - CourseManagementTests: 10 PASS
-  - UserAndProfileTests: 11 PASS
-  - StudyingPlatformApplicationTests: 6 PASS
 - `stage-tester`: STATUS: PASS
 
 ### Следующий шаг:
@@ -43,16 +37,10 @@
 
 ### Изменённые файлы:
 - `pom.xml` — удалена зависимость `com.h2database:h2`
-- `src/test/java/com/studying/platform/CategoryAndCourseTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
-- `src/test/java/com/studying/platform/UserAndProfileTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
-- `src/test/java/com/studying/platform/ModuleAndLessonTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
-- `src/test/java/com/studying/platform/CourseManagementTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
-- `src/test/java/com/studying/platform/EnrollmentTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
-- `src/test/java/com/studying/platform/StudyingPlatformApplicationTests.java` — добавлена проверка `databaseIsPostgreSQL()`
+- 5 тестовых классов с `@DataJpaTest` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
+- `StudyingPlatformApplicationTests` — добавлена проверка `databaseIsPostgreSQL()`
 
-### Результаты проверок:
-- `mvn test -Dtest=StudyingPlatformApplicationTests,UserAndProfileTests`: 19 PASS, 0 FAIL — PASS
-- `mvn verify`: 75 PASS, 0 FAIL, 0 ERROR — PASS
+### Результаты: 75 PASS
 
 ### Следующий шаг:
 Пункт 2 — проверить реальное создание схемы.
@@ -62,20 +50,37 @@
 ## Выполнено — Пункт 2: Проверка схемы и ограничений
 
 ### Созданный файл:
-- `src/test/java/com/studying/platform/PostgresSchemaTests.java` — новый тестовый класс с 9 проверками схемы
+- `src/test/java/com/studying/platform/PostgresSchemaTests.java` — 9 проверок схемы через JDBC metadata
 
 ### Проверяемые элементы:
-- **Соединение**: `SELECT 1`, активный профиль `test`, продукт БД — PostgreSQL
-- **Таблицы**: users, profiles, categories, courses, modules, lessons, enrollments, tags, course_reviews, course_tag
-- **Первичные ключи**: одиночный `id` для 9 таблиц; составной `(course_id, tag_id)` для course_tag
-- **Внешние ключи**: 11 FK (profiles→users, courses→users, courses→categories, modules→courses, lessons→modules, enrollments→users, enrollments→courses, course_reviews→courses, course_reviews→users, course_tag→courses, course_tag→tags)
-- **Уникальные ограничения**: users.login, profiles.user_id, enrollments(user_id+course_id), tags.name
-- **Конфигурация**: `ddl-auto=create-drop` в тесте, изоляция тестовой БД от рабочей
+- 10 таблиц, PK (10), FK (11), уникальные ограничения (4), ddl-auto, изоляция БД
 
-### Результаты проверок:
-- `mvn test -Dtest=PostgresSchemaTests`: 9 PASS, 0 FAIL — PASS
-- `mvn verify`: 84 PASS, 0 FAIL, 0 ERROR — PASS
-- `git diff --check`: PASS
+### Результаты: 84 PASS
 
 ### Следующий шаг:
-Пункт 3 — привести пользователя к согласованной модели (удалить пароль, добавить email).
+Пункт 3 — привести пользователя к согласованной модели.
+
+---
+
+## Выполнено — Пункт 3: Привести пользователя к согласованной модели
+
+### Изменённые файлы:
+- **`src/main/java/com/studying/platform/entity/User.java`** — удалено поле `password`; поле `login` переименовано в `email` (физическая колонка `users.login` сохранена); добавлены `@NotBlank`, `@Email`, `@Size(max=50)` на email, `@NotNull` на role; конструктор `User(String email, UserRole role)`; обновлён JavaDoc
+- **`src/main/java/com/studying/platform/repository/UserRepository.java`** — `findByLogin(String login)` → `findByEmail(String email)`
+- **`pom.xml`** — добавлен `spring-boot-starter-validation`
+- **`src/test/java/com/studying/platform/CategoryAndCourseTests.java`** — обновлены конструкторы `new User(email, role)`, `getLogin()` → `getEmail()`, исключения `PropertyValueException` → `ConstraintViolationException` для PostgreSQL
+- **`src/test/java/com/studying/platform/UserAndProfileTests.java`** — обновлены конструкторы, `findByLogin` → `findByEmail`, `getLogin()` → `getEmail()`, `getPassword()` удалён; добавлены тесты flush/clear/reload; 7 новых тестов валидации (null/empty/whitespace/invalid/long email, null role)
+- **`src/test/java/com/studying/platform/ModuleAndLessonTests.java`** — обновлён `createTeacher(email)` helper; исключения `PropertyValueException` → `ConstraintViolationException`
+- **`src/test/java/com/studying/platform/EnrollmentTests.java`** — обновлены все ~25 вызовов `new User(email, role)`
+- **`src/test/java/com/studying/platform/CourseManagementTests.java`** — обновлены `createTeacher(email)` и `createStudent(email)` helpers
+
+### Результаты:
+- `mvn test -Dtest=UserAndProfileTests`: 20 PASS — PASS
+- `mvn verify`: **92 PASS**, 0 FAIL — PASS
+- `git diff --check`: **PASS**
+
+### Блокер существующей базы:
+Колонка `users.password NOT NULL` сохранится при `ddl-auto=update` — вставка без пароля в старую схему завершится ошибкой. Тесты используют отдельную контейнерную БД (`create-drop`), поэтому не затронуты. Для использования старой рабочей БД требуется согласованная миграция.
+
+### Следующий шаг:
+Пункт 4 — добавить `UserService` с конструкторным внедрением и транзакционным методом `createUser`.

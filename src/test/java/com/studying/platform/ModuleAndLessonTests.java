@@ -12,7 +12,8 @@ import com.studying.platform.repository.LessonRepository;
 import com.studying.platform.repository.ModuleRepository;
 import com.studying.platform.repository.UserRepository;
 import jakarta.persistence.EntityManager;
-import org.hibernate.PropertyValueException;
+import org.hibernate.TransientPropertyValueException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -97,8 +98,8 @@ class ModuleAndLessonTests {
     /**
      * Создаёт и сохраняет тестового преподавателя.
      */
-    private User createTeacher(String login) {
-        User user = new User(login, "password123", UserRole.TEACHER);
+    private User createTeacher(String email) {
+        User user = new User(email, UserRole.TEACHER);
         entityManager.persist(user);
         entityManager.flush();
         return user;
@@ -431,10 +432,10 @@ class ModuleAndLessonTests {
         lesson.setContent("Законы Ньютона");
         lesson.setModule(module);
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(lesson);
             entityManager.flush();
-        }, "Сохранение урока с null названием должно вызвать ошибку значения свойства");
+        }, "Сохранение урока с null названием должно вызвать нарушение целостности данных");
     }
 
     /**
@@ -446,10 +447,10 @@ class ModuleAndLessonTests {
         lesson.setTitle("Свободный урок");
         lesson.setContent("Без привязки к модулю");
 
-        assertThrows(PropertyValueException.class, () -> {
+        assertThrows(ConstraintViolationException.class, () -> {
             entityManager.persist(lesson);
             entityManager.flush();
-        }, "Сохранение урока без модуля должно вызвать ошибку значения свойства");
+        }, "Сохранение урока без модуля должно вызвать нарушение целостности данных");
     }
 
     /**
