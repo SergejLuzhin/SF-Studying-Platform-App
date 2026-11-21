@@ -135,11 +135,6 @@ class MvpFlowTests {
     private String uniquePrefix;
 
     /**
-     * Префикс email для адресного удаления пользователей текущего теста.
-     */
-    private String userEmailPrefix;
-
-    /**
      * Инициализация уникального префикса перед каждым тестом.
      * <p>
      * Префикс ограничивается 20 символами, чтобы при добавлении suffix
@@ -149,7 +144,6 @@ class MvpFlowTests {
     @BeforeEach
     void setUp() {
         uniquePrefix = "mvp-" + System.currentTimeMillis() + "-" + new java.util.Random().nextInt(10000);
-        userEmailPrefix = uniquePrefix.substring(0, Math.min(20, uniquePrefix.length()));
     }
 
     /**
@@ -171,7 +165,8 @@ class MvpFlowTests {
                 moduleId != null ? Set.of(moduleId) : Set.of(),
                 courseId != null ? Set.of(courseId) : Set.of(),
                 categoryId != null ? Set.of(categoryId) : Set.of(),
-                userEmailPrefix
+                java.util.stream.Stream.of(teacherId, studentId)
+                        .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet())
         );
     }
 
@@ -420,9 +415,8 @@ class MvpFlowTests {
     /**
      * Проверка: очистка не удаляет посторонние тестовые данные.
      * <p>
-     * Создаёт категорию и пользователя с известными ID, затем вызывает очистку.
-     * В новой транзакции проверяет, что посторонние данные остались.
-     * Созданные контрольные данные удаляются в @AfterEach.
+     * Вызывает очистку отслеживаемых данных и проверяет сохранность контрольных
+     * объектов; затем удаляет контрольные объекты по их идентификаторам.
      * </p>
      */
     @Test
@@ -437,14 +431,20 @@ class MvpFlowTests {
                 "prestige-cleanup-" + System.nanoTime() + "@ex.com", UserRole.STUDENT);
         Long prestigeUserId = prestigeUser.getId();
 
-        // Очистка @AfterEach удалит только данные текущего теста (с uniquePrefix)
-
-        // Проверка: посторонние данные остались после очистки
-        // Выполняется в той же транзакции, но в новой сессии
-        assertTrue(categoryRepository.findById(prestigeCategoryId).isPresent(),
-                "Посторонняя категория не должна быть удалена очисткой");
-        assertTrue(userRepository.findById(prestigeUserId).isPresent(),
-                "Посторонний пользователь не должен быть удалён очисткой");
+        try {
+            User tracked = userService.createUser(uniquePrefix + "-tracked@example.com", UserRole.STUDENT);
+            studentId = tracked.getId();
+            tearDown();
+            assertTrue(categoryRepository.findById(prestigeCategoryId).isPresent(),
+                    "Посторонняя категория не должна быть удалена очисткой");
+            assertTrue(userRepository.findById(prestigeUserId).isPresent(),
+                    "Посторонний пользователь не должен быть удалён очисткой");
+            assertTrue(userRepository.findById(studentId).isEmpty());
+        } finally {
+            cleanupHelper.clearTestEntities(entityManager, transactionTemplate,
+                    Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
+                    Set.of(prestigeCategoryId), Set.of(prestigeUserId));
+        }
     }
 
     /**

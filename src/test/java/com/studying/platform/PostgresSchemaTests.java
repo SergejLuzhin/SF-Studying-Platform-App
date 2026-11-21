@@ -156,7 +156,7 @@ class PostgresSchemaTests {
                 }
 
                 // Проверяем точное равенство множеств: не только наличие, но и отсутствие лишних колонок
-                assertEquals(expectedColumns, actualColumns,
+                assertPrimaryKey(expectedColumns, actualColumns,
                         "Таблица «" + tableName + "»: ожидаемый набор колонок первичного ключа " +
                                 expectedColumns + ", получено " + actualColumns);
             }
@@ -219,7 +219,7 @@ class PostgresSchemaTests {
             // Проверяем, что каждый ожидаемый FK найден
             for (String[] expected : expectedFks) {
                 String expectedKey = expected[0] + "." + expected[1] + "->" + expected[2] + "." + expected[3];
-                assertTrue(actualSet.contains(expectedKey),
+                assertForeignKey(expectedKey, actualSet,
                         "Внешний ключ «" + expectedKey +
                                 "» должен существовать. " +
                                 "Ожидаемые FK: " + expectedSet +
@@ -297,15 +297,7 @@ class PostgresSchemaTests {
 
                 Map<String, List<String>> tableConstraints = actualByTable.getOrDefault(table, Map.of());
 
-                boolean found = false;
-                for (List<String> actualCols : tableConstraints.values()) {
-                    if (expectedCols.equals(actualCols)) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                assertTrue(found,
+                assertUniqueConstraint(expectedCols, tableConstraints,
                         "Уникальное ограничение на колонки " + expectedCols +
                                 " таблицы «" + table + "» должно существовать. " +
                                 "Фактические ограничения: " + tableConstraints);
@@ -447,6 +439,60 @@ class PostgresSchemaTests {
             assertTrue(userCourseConstraint.contains("course_id"),
                     "Составное ограничение должно содержать course_id");
         }
+    }
+
+    /**
+     * Проверяет точное совпадение состава первичного ключа.
+     *
+     * @param expected ожидаемые колонки
+     * @param actual фактические колонки
+     * @param message описание проверки
+     */
+    private void assertPrimaryKey(Set<String> expected, Set<String> actual, String message) {
+        assertEquals(expected, actual, message);
+    }
+
+    /**
+     * Проверяет наличие внешнего ключа с точными колонками и таблицами.
+     *
+     * @param expected ожидаемый ключ
+     * @param actual фактические ключи
+     * @param message описание проверки
+     */
+    private void assertForeignKey(String expected, Set<String> actual, String message) {
+        assertTrue(actual.contains(expected), message);
+    }
+
+    /**
+     * Проверяет наличие одного уникального ограничения с заданными колонками.
+     *
+     * @param expected ожидаемые колонки одного ограничения
+     * @param actual ограничения, сгруппированные по имени
+     * @param message описание проверки
+     */
+    private void assertUniqueConstraint(List<String> expected, Map<String, List<String>> actual, String message) {
+        assertTrue(actual.values().stream().anyMatch(expected::equals), message);
+    }
+
+    /** Проверяет отклонение первичного ключа с дополнительной колонкой. */
+    @Test
+    void primaryKeyMatcherRejectsExtraColumn() {
+        assertThrows(AssertionError.class,
+                () -> assertPrimaryKey(Set.of("id"), Set.of("id", "extra"), "Неверный PK"));
+    }
+
+    /** Проверяет отклонение внешнего ключа с неверной колонкой владельца. */
+    @Test
+    void foreignKeyMatcherRejectsWrongColumn() {
+        assertThrows(AssertionError.class, () -> assertForeignKey("profiles.user_id->users.id",
+                Set.of("profiles.other_id->users.id"), "Неверный FK"));
+    }
+
+    /** Проверяет, что два отдельных ограничения не заменяют составное. */
+    @Test
+    void uniqueMatcherRejectsSeparateConstraints() {
+        assertThrows(AssertionError.class, () -> assertUniqueConstraint(List.of("user_id", "course_id"),
+                Map.of("first", List.of("user_id"), "second", List.of("course_id")), "Неверный UNIQUE"));
     }
 
     /**

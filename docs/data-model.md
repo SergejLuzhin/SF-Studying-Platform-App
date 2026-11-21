@@ -18,12 +18,12 @@
 | `email` | `String` | `VARCHAR(50)` | `@Column(name = "login", unique = true, nullable = false)`, `@NotBlank`, `@Email`, `@Size(max = 50)` |
 | `role` | `UserRole` | `VARCHAR(20)` | `@Enumerated(EnumType.STRING)`, `@NotNull`, `nullable = false` |
 
-**Примечание:** Java-поле называется `email`, однако физическое имя колонки в базе данных — `users.login`. Это сделано для обратной совместимости: существующая схема содержит колонку `login`, и переименование колонки требует отдельной миграции (см. `state.md` — блокер старой базы). Значение `password` удалено из модели: аутентификация и хранение паролей не входят в объём проекта.
+**Примечание:** Java-поле называется `email`, физическое имя колонки в базе данных — `users.login`. Аутентификация и хранение паролей не входят в объём проекта.
 
 **Enum `UserRole`:** `STUDENT`, `TEACHER`, `ADMIN`.
 
 **Связи:**
-- `1:1` с `Profile` (владелец — `Profile`; обратная связь `User.profile` без явного `fetch = LAZY`; конкретная стратегия загрузки определяется настройками `Profile.user`)
+- `1:1` с `Profile` (владелец — `Profile`; обратная связь `User.profile` не задаёт `fetch = LAZY` и имеет стандартную для JPA настройку EAGER)
 - `1:M` с `Course` (через `Course.teacher`, владелец — `Course`, LAZY)
 - `1:M` с `Enrollment` (владелец — `Enrollment`, LAZY)
 - `1:M` с `Submission` (владелец — `Submission`, LAZY, **не реализовано**)
@@ -84,7 +84,7 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `title` | `String` | `VARCHAR(200)` | `@Column(nullable = false)` |
-| `description` | `String` | `TEXT` | `@Lob` |
+| `description` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `duration` | `Integer` | `INTEGER` | Минимальное значение 1 |
 | `startDate` | `LocalDate` | `DATE` | `@Column(nullable = false)` |
 | `teacherId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "teacher_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_teacher"))` |
@@ -135,16 +135,16 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `title` | `String` | `VARCHAR(200)` | `@Column(nullable = false)` |
-| `description` | `String` | `TEXT` | `@Lob` |
+| `description` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `orderIndex` | `Integer` | `INTEGER` | `@Column(nullable = false)` |
 | `courseId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_module_course"))` |
 
 **Связи:**
 - `M:1` с `Course` (владелец — `Module`, LAZY)
-- `1:M` с `Lesson` (`@OneToMany(mappedBy = "module", fetch = FetchType.LAZY, cascade = {PERSIST, MERGE}, orphanRemoval = true)`)
+- `1:M` с `Lesson` (`@OneToMany(mappedBy = "module", fetch = FetchType.LAZY, cascade = {PERSIST, MERGE, REMOVE}, orphanRemoval = true)`)
 - `1:1` с `Quiz` (`@OneToOne(mappedBy = "module", fetch = FetchType.LAZY, cascade = {PERSIST, MERGE}, orphanRemoval = true)`)
 
-**Каскады:** `PERSIST, MERGE` для `Lesson` и `Quiz` (через `mappedBy`), `orphanRemoval = true`.
+**Каскады:** `PERSIST, MERGE, REMOVE` для `Lesson`; каскады для ещё не реализованного `Quiz` приведены как проектируемые.
 
 ---
 
@@ -154,7 +154,7 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `title` | `String` | `VARCHAR(200)` | `@Column(nullable = false)` |
-| `content` | `String` | `TEXT` | `@Lob` |
+| `content` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `videoUrl` | `String` | `VARCHAR(500)` | |
 | `moduleId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "module_id", nullable = false, foreignKey = @ForeignKey(name = "fk_lesson_module"))` |
 
@@ -326,7 +326,7 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 
 | Связь | Владелец | Обратная сторона | FetchType (коллекция) |
 |---|---|---|---|
-| User ↔ Profile | Profile | User (mappedBy) | LAZY |
+| User ↔ Profile | Profile | User (mappedBy) | EAGER по умолчанию на стороне User |
 | User (teacher) ↔ Course | Course | User (mappedBy) | LAZY |
 | Category ↔ Course | Course | Category (mappedBy) | LAZY |
 | Course ↔ Module | Module | Course (mappedBy) | LAZY |
@@ -356,7 +356,7 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 | Course | → Enrollment | — | false |
 | Course | → CourseReview | — | false |
 | Course | ↔ Tag | PERSIST, MERGE | false |
-| Module | → Lesson | PERSIST, MERGE | true |
+| Module | → Lesson | PERSIST, MERGE, REMOVE | true |
 | Module | → Quiz | PERSIST, MERGE | true |
 | Lesson | → Assignment | PERSIST, MERGE | true |
 | Quiz | → Question | PERSIST, MERGE | true |
@@ -602,7 +602,7 @@ MULTIPLE_CHOICE — один или несколько правильных от
 
 ## 8. Примечания по реализации
 
-1. **Ленивая загрузка:** все коллекции (`@OneToMany`, `@ManyToMany`) используют `FetchType.LAZY`. Связи `@ManyToOne` реализованных сущностей также явно заданы как `LAZY` (кроме `Course.category`, которая загружается `EAGER` как небольшая справочная сущность). `@OneToOne` со стороны `Profile` также `LAZY`. Обратная связь `User.profile` не задаёт `fetch = LAZY` явно; стратегия загрузки определяется настройками `Profile.user`.
+1. **Ленивая загрузка:** все коллекции (`@OneToMany`, `@ManyToMany`) используют `FetchType.LAZY`. Связи `@ManyToOne` реализованных сущностей также явно заданы как `LAZY` (кроме `Course.category`, которая загружается `EAGER` как небольшая справочная сущность). `@OneToOne` со стороны `Profile` настроена как `LAZY`; обратная связь `User.profile` имеет стандартную настройку `EAGER`.
 
 2. **Генерация ID:** все сущности используют `@GeneratedValue(strategy = GenerationType.IDENTITY)` с PostgreSQL sequences.
 
@@ -612,6 +612,6 @@ MULTIPLE_CHOICE — один или несколько правильных от
 
 5. **Валидация диапазонов:** для `rating` (1-5) и `maxScore` (положительное) рекомендуется валидация на уровне сервиса (не на уровне JPA).
 
-6. **Хранение текстовых полей:** для реализованных сущностей (`Course.description`, `Module.description`, `Lesson.content`, `Profile.bio`, `CourseReview.comment`) текстовые поля маппятся как `TEXT` без `@Lob` — это предотвращает запись OID Large Object вместо текста. Старые данные, созданные с маппингом `@Lob` + `columnDefinition = "TEXT"`, могут содержать OID Large Object в колонках; требуется отдельная согласованная миграция.
+6. **Хранение текстовых полей:** для реализованных сущностей (`Course.description`, `Module.description`, `Lesson.content`, `Profile.bio`, `CourseReview.comment`) текстовые поля маппятся как `TEXT` без `@Lob` — это обеспечивает хранение исходного текста в колонках.
 
-7. **Совместимость старой базы:** физическое имя колонки пользователя — `users.login` (хранит email), а также в старой схеме может сохраниться колонка `users.password NOT NULL` (удалённая из модели). `ddl-auto=update` не удалит эту колонку автоматически. Вставка нового пользователя без пароля в старую схему завершится ошибкой. Для использования старой рабочей базы требуется согласованная миграция.
+7. **Рабочая база:** для приложения используется `studying_platform_v2`; для тестов — отдельная база `platform_test` или PostgreSQL через Testcontainers.

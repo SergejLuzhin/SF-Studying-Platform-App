@@ -119,10 +119,8 @@ class UserServiceTests {
      */
     private String uniquePrefix;
 
-    /**
-     * Префикс email для адресного удаления пользователей текущего теста.
-     */
-    private String userEmailPrefix;
+    /** Идентификаторы пользователей, созданных текущим тестом. */
+    private final Set<Long> userIds = new java.util.HashSet<>();
 
     /**
      * Идентификатор созданного пользователя (отслеживается для адресной очистки).
@@ -154,7 +152,6 @@ class UserServiceTests {
     @BeforeEach
     void setUp() {
         uniquePrefix = "test-" + System.currentTimeMillis() + "-" + new java.util.Random().nextInt(10000);
-        userEmailPrefix = uniquePrefix.substring(0, Math.min(14, uniquePrefix.length()));
     }
 
     /**
@@ -176,7 +173,7 @@ class UserServiceTests {
                 Set.of(),       // moduleIds — модули не создаются
                 courseId != null ? Set.of(courseId) : Set.of(),
                 categoryId != null ? Set.of(categoryId) : Set.of(),
-                userEmailPrefix
+                userIds
         );
     }
 
@@ -194,6 +191,7 @@ class UserServiceTests {
         String email = uniquePrefix + "-student@example.com";
 
         User student = userService.createUser(email, UserRole.STUDENT);
+        userIds.add(student.getId());
 
         assertNotNull(student.getId());
         assertEquals(email, student.getEmail());
@@ -218,6 +216,7 @@ class UserServiceTests {
         String email = uniquePrefix + "-teacher@example.com";
 
         User teacher = userService.createUser(email, UserRole.TEACHER);
+        userIds.add(teacher.getId());
 
         assertNotNull(teacher.getId());
         assertEquals(email, teacher.getEmail());
@@ -238,6 +237,7 @@ class UserServiceTests {
     void getUser_shouldReturnExistingUser() {
         String email = uniquePrefix + "-read@example.com";
         User created = userService.createUser(email, UserRole.STUDENT);
+        userIds.add(created.getId());
         userId = created.getId();
 
         User found = userService.getUser(created.getId());
@@ -257,6 +257,7 @@ class UserServiceTests {
     void getUser_shouldBeAvailableOutsideTransaction() {
         String email = uniquePrefix + "-trans@example.com";
         User created = userService.createUser(email, UserRole.TEACHER);
+        userIds.add(created.getId());
         userId = created.getId();
 
         // entityManager.clear() не вызывается — тест работает без внешней транзакции
@@ -333,6 +334,7 @@ class UserServiceTests {
         String email = "a".repeat(43) + "@ex.com";
         assertEquals(50, email.length());
         User user = userService.createUser(email, UserRole.ADMIN);
+        userIds.add(user.getId());
         assertNotNull(user.getId());
         assertEquals(email, user.getEmail());
     }
@@ -346,7 +348,7 @@ class UserServiceTests {
     void createUser_withDuplicateEmail_shouldThrowIllegalStateException() {
         String email = uniquePrefix + "-dup@example.com";
 
-        userService.createUser(email, UserRole.STUDENT);
+        userIds.add(userService.createUser(email, UserRole.STUDENT).getId());
 
         IllegalStateException exception = assertThrows(IllegalStateException.class,
                 () -> userService.createUser(email, UserRole.TEACHER));
@@ -384,6 +386,7 @@ class UserServiceTests {
         // Создание преподавателя через UserService
         String teacherEmail = uniquePrefix + "-course-teacher@example.com";
         User teacher = userService.createUser(teacherEmail, UserRole.TEACHER);
+        userIds.add(teacher.getId());
         userId = teacher.getId();
 
         // Создание курса через CourseRepository напрямую (проверка связи)
@@ -410,6 +413,7 @@ class UserServiceTests {
         // Создание преподавателя через UserService
         String teacherEmail = uniquePrefix + "-enroll-teacher@example.com";
         User teacher = userService.createUser(teacherEmail, UserRole.TEACHER);
+        userIds.add(teacher.getId());
         userId = teacher.getId();
 
         // Создание категории и курса через репозитории
@@ -424,6 +428,7 @@ class UserServiceTests {
         // Создание студента через UserService
         String studentEmail = uniquePrefix + "-enroll-student@example.com";
         User student = userService.createUser(studentEmail, UserRole.STUDENT);
+        userIds.add(student.getId());
         userId = student.getId();
 
         // Запись студента через Spring-бин EnrollmentService

@@ -30,13 +30,12 @@ class StudyingPlatformApplicationTests {
     /**
      * Проверка успешной инициализации контекста Spring Boot.
      * <p>
-     * Успешное выполнение теста означает, что:
+     * Успешное выполнение теста означает, что:</p>
      * <ul>
      *   <li>Spring Boot успешно загрузил конфигурацию профиля «test»;</li>
      *   <li>Testcontainers поднял контейнер PostgreSQL;</li>
      *   <li>Spring Data JPA корректно настроил DataSource и EntityManagerFactory.</li>
      * </ul>
-     * </p>
      *
      * @param dataSource автоматически настроенный Spring DataSource;
      *                   проверяется, что не {@code null}

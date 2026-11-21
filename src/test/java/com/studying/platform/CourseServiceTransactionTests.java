@@ -111,11 +111,6 @@ class CourseServiceTransactionTests {
     private String uniquePrefix;
 
     /**
-     * Префикс email для адресного удаления пользователей текущего теста.
-     */
-    private String userEmailPrefix;
-
-    /**
      * Идентификатор созданного преподавателя (отслеживается для адресной очистки).
      */
     private Long teacherId;
@@ -160,7 +155,6 @@ class CourseServiceTransactionTests {
     @BeforeEach
     void setUp() {
         uniquePrefix = "cs-txn-" + System.currentTimeMillis() + "-" + new java.util.Random().nextInt(10000);
-        userEmailPrefix = uniquePrefix.substring(0, Math.min(20, uniquePrefix.length()));
     }
 
     /**
@@ -192,7 +186,7 @@ class CourseServiceTransactionTests {
                 !allModuleIds.isEmpty() ? allModuleIds : Set.of(),
                 courseId != null ? Set.of(courseId) : Set.of(),
                 categoryId != null ? Set.of(categoryId) : Set.of(),
-                userEmailPrefix
+                teacherId != null ? Set.of(teacherId) : Set.of()
         );
     }
 

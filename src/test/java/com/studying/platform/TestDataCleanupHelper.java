@@ -16,9 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * </p>
  * <p>
  * Порядок удаления: отзывы → записи → уроки → модули → курсы → категории → пользователи.
- * Для пользователей удаление производится по префиксу email,
- * что гарантирует адресное удаление только данных текущего теста
- * и не затрагивает посторонние тестовые данные.
+ * Пользователи удаляются только по явно переданным идентификаторам.
  * Для записей на курс удаление производится по ID курсов
  * и email пользователей, что позволяет удалять записи,
  * когда их собственные ID не отслеживаются.
@@ -39,7 +37,7 @@ class TestDataCleanupHelper {
      * <p>
      * Удаляет созданные тестовые данные в обратном порядке зависимостей:
      * отзывы, записи, уроки, модули, курсы, категории и пользователи.
-     * Для пользователей удаление производится по префиксу email.
+     * Пользователи удаляются только по явно переданным идентификаторам.
      * Для записей на курс удаление производится по ID курсов
      * и email пользователей, что позволяет удалять записи,
      * когда их собственные ID не отслеживаются.
@@ -58,7 +56,7 @@ class TestDataCleanupHelper {
      * @param moduleIds идентификаторы модулей
      * @param courseIds идентификаторы курсов
      * @param categoryIds идентификаторы категорий
-     * @param userEmailPrefix префикс email для удаления пользователей текущего теста
+     * @param userIds идентификаторы пользователей текущего теста
      */
     void clearTestEntities(
             EntityManager entityManager,
@@ -70,7 +68,7 @@ class TestDataCleanupHelper {
             Set<Long> moduleIds,
             Set<Long> courseIds,
             Set<Long> categoryIds,
-            String userEmailPrefix) {
+            Set<Long> userIds) {
 
         transactionTemplate.executeWithoutResult(status -> {
             // 1. Удаляем отзывы о курсах (зависят от course)
@@ -120,10 +118,10 @@ class TestDataCleanupHelper {
                         .executeUpdate();
             }
 
-            // 7. Удаляем пользователей по префиксу email
-            if (userEmailPrefix != null && !userEmailPrefix.isEmpty()) {
-                entityManager.createQuery("DELETE FROM User u WHERE u.email LIKE :prefix")
-                        .setParameter("prefix", userEmailPrefix + "%")
+            // 7. Удаляем только явно отслеживаемых пользователей
+            if (userIds != null && !userIds.isEmpty()) {
+                entityManager.createQuery("DELETE FROM User u WHERE u.id IN (:ids)")
+                        .setParameter("ids", userIds)
                         .executeUpdate();
             }
         });

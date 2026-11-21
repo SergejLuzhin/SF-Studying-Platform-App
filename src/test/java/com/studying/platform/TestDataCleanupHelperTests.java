@@ -119,7 +119,7 @@ class TestDataCleanupHelperTests {
                 transactionTemplate,
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                 Set.of(trackedId),
-                ""
+                Set.of()
         );
 
         entityManager.clear();
@@ -130,7 +130,7 @@ class TestDataCleanupHelperTests {
     /**
      * Проверка: помощник удаляет отслеживаемых пользователей.
      * <p>
-     * Создаёт пользователя, вызывает очистку с префиксом email,
+     * Создаёт пользователя, вызывает очистку с его идентификатором,
      * затем проверяет, что пользователь удалён.
      * </p>
      */
@@ -144,7 +144,7 @@ class TestDataCleanupHelperTests {
                 entityManager,
                 transactionTemplate,
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
-                uniquePrefix + "-tracked"
+                Set.of(trackedUser.getId())
         );
 
         entityManager.clear();
@@ -172,7 +172,7 @@ class TestDataCleanupHelperTests {
                 transactionTemplate,
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                 Set.of(99999L), // другой ID
-                ""
+                Set.of()
         );
 
         entityManager.clear();
@@ -184,7 +184,7 @@ class TestDataCleanupHelperTests {
      * Проверка: помощник не удаляет посторонних пользователей.
      * <p>
      * Создаёт постороннего пользователя с уникальным email,
-     * вызывает очистку с другим префиксом, затем проверяет,
+     * вызывает очистку с другим идентификатором, затем проверяет,
      * что посторонний пользователь остался.
      * </p>
      */
@@ -195,17 +195,38 @@ class TestDataCleanupHelperTests {
         entityManager.persist(untrackedUser);
         entityManager.flush();
 
-        // Очистка с другим префиксом
+        // Очистка с другим идентификатором
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
-                "different-prefix"
+                Set.of(99999L)
         );
 
         entityManager.clear();
         assertTrue(userRepository.findByEmail(otherEmail).isPresent(),
                 "Посторонний пользователь не должен быть удалён");
+    }
+
+    /**
+     * Проверяет, что очистка по ID сохраняет другого пользователя с тем же префиксом email.
+     */
+    @Test
+    void cleanup_preservesUserWithSameEmailPrefix() {
+        User tracked = new User(uniquePrefix + "-tracked@t.com", UserRole.STUDENT);
+        User other = new User(uniquePrefix + "-other@t.com", UserRole.STUDENT);
+        entityManager.persist(tracked);
+        entityManager.persist(other);
+        entityManager.flush();
+        Long trackedId = tracked.getId();
+        Long otherId = other.getId();
+
+        cleanupHelper.clearTestEntities(entityManager, transactionTemplate,
+                Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(trackedId));
+        entityManager.clear();
+
+        assertFalse(userRepository.findById(trackedId).isPresent());
+        assertTrue(userRepository.findById(otherId).isPresent());
     }
 
     /**
@@ -221,7 +242,7 @@ class TestDataCleanupHelperTests {
                         entityManager,
                         transactionTemplate,
                         Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
-                        ""
+                        Set.of()
                 ),
                 "Очистка с пустыми коллекциями не должна выбрасывать исключение"
         );
@@ -275,7 +296,7 @@ class TestDataCleanupHelperTests {
                 Set.of(moduleId),
                 Set.of(courseId),
                 Set.of(),       // categoryIds — категория не отслеживается (общая)
-                uniquePrefix + "-cleanup"
+                Set.of(teacher.getId())
         );
 
         entityManager.clear();

@@ -10,7 +10,7 @@ spring:
       on-profile: dev
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/studying_platform}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/studying_platform_v2}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
 

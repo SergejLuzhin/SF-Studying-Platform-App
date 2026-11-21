@@ -116,17 +116,20 @@ class PostgresTextStorageTests {
                 entityManager.getEntityManagerFactory());
     }
 
+    /**
+     * Удаляет созданные текущим тестом данные в порядке зависимостей.
+     */
     @AfterEach
     void cleanup() {
         TransactionTemplate tt = new TransactionTemplate(transactionManager);
         tt.executeWithoutResult(s -> {
-            reviewIds.forEach(id -> { try { courseReviewRepository.deleteById(id); } catch (Exception ignored) {} });
-            lessonIds.forEach(id -> { try { lessonRepository.deleteById(id); } catch (Exception ignored) {} });
-            moduleIds.forEach(id -> { try { moduleRepository.deleteById(id); } catch (Exception ignored) {} });
-            courseIds.forEach(id -> { try { courseRepository.deleteById(id); } catch (Exception ignored) {} });
-            categoryIds.forEach(id -> { try { categoryRepository.deleteById(id); } catch (Exception ignored) {} });
-            profileIds.forEach(id -> { try { profileRepository.deleteById(id); } catch (Exception ignored) {} });
-            userIds.forEach(id -> { try { userRepository.deleteById(id); } catch (Exception ignored) {} });
+            reviewIds.forEach(courseReviewRepository::deleteById);
+            lessonIds.forEach(lessonRepository::deleteById);
+            moduleIds.forEach(moduleRepository::deleteById);
+            courseIds.forEach(courseRepository::deleteById);
+            categoryIds.forEach(categoryRepository::deleteById);
+            profileIds.forEach(profileRepository::deleteById);
+            userIds.forEach(userRepository::deleteById);
         });
         userIds.clear();
         categoryIds.clear();
