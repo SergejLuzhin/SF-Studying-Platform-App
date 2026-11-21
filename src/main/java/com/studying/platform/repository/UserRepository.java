@@ -9,7 +9,7 @@ import java.util.Optional;
  * Репозиторий для сущности «Пользователь».
  * <p>
  * Обеспечивает базовые CRUD-операции для пользователей учебной платформы,
- * а также поиск по уникальному адресу электронной почты.
+ * а также поиск по уникальному адресу электронной почты и проверку существования.
  * </p>
  */
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -21,4 +21,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return обязательное значение с пользователем, если найден; пустое значение — если нет
      */
     Optional<User> findByEmail(String email);
+
+    /**
+     * Проверяет существование пользователя по идентификатору.
+     *
+     * @param id идентификатор пользователя
+     * @return true, если пользователь с заданным идентификатором существует
+     */
+    boolean existsById(Long id);
 }

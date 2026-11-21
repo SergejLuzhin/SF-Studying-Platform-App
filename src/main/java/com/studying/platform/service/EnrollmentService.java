@@ -141,19 +141,28 @@ public class EnrollmentService {
     /**
      * Возвращает список курсов, на которые студент активно записан.
      * <p>
-     * Метод выполняется внутри транзакции, поэтому доступ к ленивым коллекциям безопасен.
+     * Метод выполняется внутри транзакции, а {@link EntityGraph} в репозитории
+     * обеспечивает загрузку связанных курсов, поэтому скалярные поля
+     * (идентификатор и название) доступны после выхода из транзакции.
+     * Если студент не найден — выбрасывает {@link ResourceNotFoundException};
+     * если студент найден, но активных записей нет — возвращает пустой список.
      * </p>
      *
      * @param studentId идентификатор студента
      * @return список курсов со статусом ACTIVE
+     * @throws ResourceNotFoundException если студент с заданным идентификатором не найден
      */
     public List<Course> getStudentCourses(Long studentId) {
+        if (!userRepository.existsById(studentId)) {
+            throw new ResourceNotFoundException(
+                    "Студент с идентификатором " + studentId + " не найден");
+        }
+
         List<Enrollment> enrollments = enrollmentRepository
                 .findByUserIdAndStatus(studentId, EnrollmentStatus.ACTIVE);
 
         List<Course> courses = new ArrayList<>();
         for (Enrollment enrollment : enrollments) {
-            // Инициализация ленивой ссылки на курс внутри транзакции
             Course course = enrollment.getCourse();
             courses.add(course);
         }
@@ -163,19 +172,28 @@ public class EnrollmentService {
     /**
      * Возвращает список студентов, активно записанных на курс.
      * <p>
-     * Метод выполняется внутри транзакции, поэтому доступ к ленивым коллекциям безопасен.
+     * Метод выполняется внутри транзакции, а {@link EntityGraph} в репозитории
+     * обеспечивает загрузку связанных пользователей, поэтому скалярные поля
+     * (идентификатор и адрес электронной почты) доступны после выхода из транзакции.
+     * Если курс не найден — выбрасывает {@link ResourceNotFoundException};
+     * если курс найден, но активных записей нет — возвращает пустой список.
      * </p>
      *
      * @param courseId идентификатор курса
      * @return список студентов со статусом ACTIVE
+     * @throws ResourceNotFoundException если курс с заданным идентификатором не найден
      */
     public List<User> getCourseStudents(Long courseId) {
+        if (!courseRepository.existsById(courseId)) {
+            throw new ResourceNotFoundException(
+                    "Курс с идентификатором " + courseId + " не найден");
+        }
+
         List<Enrollment> enrollments = enrollmentRepository
                 .findByCourseIdAndStatus(courseId, EnrollmentStatus.ACTIVE);
 
         List<User> students = new ArrayList<>();
         for (Enrollment enrollment : enrollments) {
-            // Инициализация ленивой ссылки на пользователя внутри транзакции
             User student = enrollment.getUser();
             students.add(student);
         }

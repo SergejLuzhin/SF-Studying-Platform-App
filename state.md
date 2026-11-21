@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 4 плана исправлений: Добавить создание пользователя через сервис** (`completed`)
+**Пункт 5 плана исправлений: Исправить списки курсов и студентов вне транзакции** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -107,3 +107,32 @@
 
 ### Следующий шаг:
 Пункт 5 — исправить списки курсов и студентов вне транзакции.
+
+---
+
+## Выполнено — Пункт 5: Исправить списки курсов и студентов вне транзакции
+
+### Изменённые файлы:
+- **`src/main/java/com/studying/platform/repository/EnrollmentRepository.java`** — добавлен `@EntityGraph(attributePaths = "course")` к `findByUserIdAndStatus` и `@EntityGraph(attributePaths = "user")` к `findByCourseIdAndStatus`; обновлён JavaDoc
+- **`src/main/java/com/studying/platform/service/EnrollmentService.java`** — в `getStudentCourses` и `getCourseStudents` добавлена проверка существования student/course через `existsById` с выбросом `ResourceNotFoundException`; исправлены комментарии на точные; сохранена ленивая загрузка коллекций по умолчанию
+- **`src/main/java/com/studying/platform/repository/UserRepository.java`** — добавлен метод `existsById(Long id)`
+- **`src/main/java/com/studying/platform/repository/CourseRepository.java`** — добавлен метод `existsById(Long id)`
+
+### Созданный файл:
+- **`src/test/java/com/studying/platform/EnrollmentServiceTransactionTests.java`** — 8 интеграционных тестов через `@SpringBootTest` с `@Transactional(propagation = Propagation.NOT_SUPPORTED)`:
+  - `getStudentCourses_fieldsAccessibleOutsideTransaction` — 2 курса студента, проверка `TransactionSynchronizationManager.isActualTransactionActive() == false`, чтение `getId()` и `getTitle()`
+  - `getCourseStudents_fieldsAccessibleOutsideTransaction` — 2 студента курса, проверка транзакции закрыта, чтение `getId()` и `getEmail()`
+  - `getCourseStudents_filtersOutDroppedStudents` — один активный, один отписанный; возвращается только активный
+  - `getStudentCourses_emptyListForExistingStudentWithoutEnrollments` — пустой список для существующего студента
+  - `getCourseStudents_emptyListForExistingCourseWithoutEnrollments` — пустой список для существующего курса
+  - `getStudentCourses_nonExistentStudent_shouldThrow` — `ResourceNotFoundException`
+  - `getCourseStudents_nonExistentCourse_shouldThrow` — `ResourceNotFoundException`
+  - `getStudentCourses_contentCorrectRegardlessOfOrder` — проверка по содержимому, а не по порядку
+
+### Результаты:
+- `mvn test -Dtest=EnrollmentServiceTransactionTests`: **8 PASS** — PASS
+- `mvn verify`: **115 PASS**, 0 FAIL — PASS
+- `git diff --check`: **PASS**
+
+### Следующий шаг:
+Пункт 6 — исправить повторную запись и статус после отписки.

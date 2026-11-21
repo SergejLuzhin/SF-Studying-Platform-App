@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 /**
  * Репозиторий для сущности «Запись на курс» {@link Enrollment}.
@@ -30,20 +31,32 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     /**
      * Находит все активные записи студента.
+     * <p>
+     * С помощью {@link EntityGraph} загружает связанные курсы,
+     * чтобы избежать {@code LazyInitializationException} при доступе
+     * к полям курса после завершения транзакции.
+     * </p>
      *
      * @param userId  идентификатор пользователя (студента)
      * @param status  статус записи
      * @return список записей студента с указанным статусом
      */
+    @EntityGraph(attributePaths = "course")
     List<Enrollment> findByUserIdAndStatus(Long userId, EnrollmentStatus status);
 
     /**
      * Находит все активные записи на курс.
+     * <p>
+     * С помощью {@link EntityGraph} загружает связанных пользователей,
+     * чтобы избежать {@code LazyInitializationException} при доступе
+     * к полям пользователя после завершения транзакции.
+     * </p>
      *
      * @param courseId идентификатор курса
      * @param status   статус записи
      * @return список записей на курс с указанным статусом
      */
+    @EntityGraph(attributePaths = "user")
     List<Enrollment> findByCourseIdAndStatus(Long courseId, EnrollmentStatus status);
 
     /**
