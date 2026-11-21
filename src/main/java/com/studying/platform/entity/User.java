@@ -4,11 +4,18 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+
+import java.util.HashSet;
+import java.util.Set;
+
+import com.studying.platform.entity.Enrollment;
 
 /**
  * Сущность «Пользователь» учебной платформы.
@@ -56,6 +63,13 @@ public class User {
      */
     @OneToOne(mappedBy = "user")
     private Profile profile;
+
+    /**
+     * Записи пользователя на курсы. Загружаются лениво.
+     * Владелец обратной связи — сущность {@link Enrollment}.
+     */
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private Set<Enrollment> enrollments = new HashSet<>();
 
     /**
      * Публичный конструктор по умолчанию, требуемый JPA-провайдером.
@@ -164,5 +178,23 @@ public class User {
      */
     public void setProfile(Profile profile) {
         this.profile = profile;
+    }
+
+    /**
+     * Возвращает коллекцию записей пользователя на курсы.
+     *
+     * @return коллекция записей
+     */
+    public Set<Enrollment> getEnrollments() {
+        return enrollments;
+    }
+
+    /**
+     * Устанавливает коллекцию записей пользователя на курсы.
+     *
+     * @param enrollments коллекция записей
+     */
+    public void setEnrollments(Set<Enrollment> enrollments) {
+        this.enrollments = enrollments;
     }
 }
