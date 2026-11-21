@@ -4,6 +4,8 @@
 
 Документ описывает детальную логическую и концептуальную модель данных для учебной платформы на базе Spring Boot, Hibernate/JPA и PostgreSQL. Модель включает **15 JPA-сущностей**, связи типов 1:1, 1:M и M:M, правила каскадирования, стратегии загрузки и механизмы защиты учебной истории.
 
+**Статус реализации:** по состоянию после исправлений реализованы сущности `User`, `Profile`, `Category`, `Tag`, `Course`, `Enrollment`, `Module`, `Lesson`, `CourseReview`. Остальные шесть сущностей — `Assignment`, `Submission`, `Quiz`, `Question`, `AnswerOption`, `QuizSubmission` — относятся к планируемым этапам 09–13 и не реализованы в коде. Функциональные сервисы тегов и отзывов также относятся к будущему этапу 14.
+
 Все поля идентифицированы, типы данных указаны с учётом PostgreSQL-совместимых JPA-маппингов. Для каждой связи определён владелец (side of relationship), тип загрузки (`FetchType`) и каскадные операции.
 
 ## 2. Перечень сущностей
@@ -13,9 +15,10 @@
 | Поле | Тип Java | Тип PostgreSQL | Аннотации / Ограничения |
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
-| `login` | `String` | `VARCHAR(50)` | `@Column(unique = true, nullable = false)` |
-| `password` | `String` | `VARCHAR(255)` | `@Column(nullable = false)` |
-| `role` | `UserRole` | `VARCHAR(20)` | `@Enumerated(EnumType.STRING)`, `nullable = false` |
+| `email` | `String` | `VARCHAR(50)` | `@Column(name = "login", unique = true, nullable = false)`, `@NotBlank`, `@Email`, `@Size(max = 50)` |
+| `role` | `UserRole` | `VARCHAR(20)` | `@Enumerated(EnumType.STRING)`, `@NotNull`, `nullable = false` |
+
+**Примечание:** Java-поле называется `email`, однако физическое имя колонки в базе данных — `users.login`. Это сделано для обратной совместимости: существующая схема содержит колонку `login`, и переименование колонки требует отдельной миграции (см. `state.md` — блокер старой базы). Значение `password` удалено из модели: аутентификация и хранение паролей не входят в объём проекта.
 
 **Enum `UserRole`:** `STUDENT`, `TEACHER`, `ADMIN`.
 
@@ -23,8 +26,8 @@
 - `1:1` с `Profile` (владелец — `Profile`, LAZY, `mappedBy = "user"`)
 - `1:M` с `Course` (через `Course.teacher`, владелец — `Course`, LAZY)
 - `1:M` с `Enrollment` (владелец — `Enrollment`, LAZY)
-- `1:M` с `Submission` (владелец — `Submission`, LAZY)
-- `1:M` с `QuizSubmission` (владелец — `QuizSubmission`, LAZY)
+- `1:M` с `Submission` (владелец — `Submission`, LAZY, **не реализовано**)
+- `1:M` с `QuizSubmission` (владелец — `QuizSubmission`, LAZY, **не реализовано**)
 - `1:M` с `CourseReview` (владелец — `CourseReview`, LAZY)
 
 **Каскады:** нет (удаление пользователя защищено).
@@ -37,13 +40,11 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `displayName` | `String` | `VARCHAR(100)` | `@Column(nullable = false)` |
-| `bio` | `String` | `TEXT` | `@Lob` |
-| `avatarUrl` | `String` | `VARCHAR(500)` | |
-| `userId` | `Long` | `BIGINT` | `@OneToOne`, `@JoinColumn(name = "user_id", unique = true, nullable = false, foreignKey = @ForeignKey(name = "fk_profile_user"))` |
-| `user` | `User` | — | `@OneToOne(mappedBy = "profile")`, LAZY |
+| `bio` | `String` | `TEXT` | `@Lob`, `@Column(columnDefinition = "TEXT")` |
+| `avatarUrl` | `String` | `VARCHAR(500)` | `@Column(length = 500)` |
+| `user` | `User` | — | `@OneToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "user_id", unique = true, nullable = false, foreignKey = @ForeignKey(name = "fk_profile_user"))` |
 
-**Связи:**
-- `1:1` с `User` (владелец — `Profile`, LAZY).
+**Примечание:** Владелец связи «один-к-одному» — `Profile`. Обратная сторона — `User.profile` с `mappedBy = "user"`. Профиль **не обязателен** для пользователя (связь необязательная).
 
 **Каскады:** `CascadeType.PERSIST`, `CascadeType.MERGE`.
 
@@ -86,8 +87,8 @@
 | `description` | `String` | `TEXT` | `@Lob` |
 | `duration` | `Integer` | `INTEGER` | Минимальное значение 1 |
 | `startDate` | `LocalDate` | `DATE` | `@Column(nullable = false)` |
-| `teacherId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "teacher_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_teacher"))` |
-| `categoryId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "category_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_category"))` |
+| `teacherId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "teacher_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_teacher"))` |
+| `categoryId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.EAGER)`, `@JoinColumn(name = "category_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_category"))` |
 
 **Связи:**
 - `M:1` с `Category` (владелец — `Course`, EAGER для категории, т.к. небольшая справочная сущность)
@@ -97,7 +98,7 @@
 - `1:M` с `CourseReview` (`@OneToMany(mappedBy = "course", fetch = FetchType.LAZY)`)
 - `M:M` с `Tag` (`@ManyToMany(fetch = FetchType.LAZY, cascade = {PERSIST, MERGE}), @JoinTable(name = "course_tag", joinColumns = @JoinColumn(name = "course_id"), inverseJoinColumns = @JoinColumn(name = "tag_id"))`)
 
-**Каскады:** `REMOVE` для `Module` и дочерних (через каскад на Module), но НЕ для `Enrollment`, `CourseReview`, `Tag`.
+**Каскады:** `REMOVE` для `Module` и дочерних (через каскад на Module); `PERSIST, MERGE` для `Tag` (через `@ManyToMany`); без каскадов для `Enrollment` и `CourseReview`.
 
 ---
 
@@ -106,14 +107,19 @@
 | Поле | Тип Java | Тип PostgreSQL | Аннотации / Ограничения |
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
-| `userId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "user_id", nullable = false)` |
-| `courseId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "course_id", nullable = false)` |
+| `user` | `User` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "user_id", nullable = false)` |
+| `course` | `Course` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "course_id", nullable = false)` |
 | `enrollDate` | `LocalDateTime` | `TIMESTAMP` | `@Column(nullable = false)` |
 | `status` | `EnrollmentStatus` | `VARCHAR(20)` | `@Enumerated(EnumType.STRING)`, `nullable = false` |
 
 **Enum `EnrollmentStatus`:** `ACTIVE`, `DROPPED`.
 
-**Ограничение уникальности:** `@UniqueConstraint(columnNames = {"user_id", "course_id"})`.
+**Ограничение уникальности:** `@UniqueConstraint(columnNames = {"user_id", "course_id"})` — один студент может быть записан на курс один раз независимо от статуса.
+
+**Правила статусов:**
+- `ACTIVE`: студент активно записан на курс. Отписка переводит статус в `DROPPED`.
+- `DROPPED`: студент отписался. Повторная запись запрещена (сервис бросает `IllegalStateException`).
+- Запись не удаляется при отписке — она сохраняется как часть архива истории.
 
 **Связи:**
 - `M:1` с `User` (студент, LAZY)
@@ -131,7 +137,7 @@
 | `title` | `String` | `VARCHAR(200)` | `@Column(nullable = false)` |
 | `description` | `String` | `TEXT` | `@Lob` |
 | `orderIndex` | `Integer` | `INTEGER` | `@Column(nullable = false)` |
-| `courseId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_module_course"))` |
+| `courseId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_module_course"))` |
 
 **Связи:**
 - `M:1` с `Course` (владелец — `Module`, LAZY)
@@ -150,7 +156,7 @@
 | `title` | `String` | `VARCHAR(200)` | `@Column(nullable = false)` |
 | `content` | `String` | `TEXT` | `@Lob` |
 | `videoUrl` | `String` | `VARCHAR(500)` | |
-| `moduleId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "module_id", nullable = false, foreignKey = @ForeignKey(name = "fk_lesson_module"))` |
+| `moduleId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "module_id", nullable = false, foreignKey = @ForeignKey(name = "fk_lesson_module"))` |
 
 **Связи:**
 - `M:1` с `Module` (владелец — `Lesson`, LAZY)
@@ -280,8 +286,8 @@
 | `rating` | `Integer` | `INTEGER` | `@Column(nullable = false)`, диапазон 1–5 |
 | `comment` | `String` | `TEXT` | `@Lob` |
 | `createdAt` | `LocalDateTime` | `TIMESTAMP` | `@Column(nullable = false)` |
-| `courseId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_review_course"))` |
-| `studentId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "student_id", nullable = false, foreignKey = @ForeignKey(name = "fk_review_student"))` |
+| `courseId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_review_course"))` |
+| `studentId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "student_id", nullable = false, foreignKey = @ForeignKey(name = "fk_review_student"))` |
 
 **Ограничение уникальности:** `@UniqueConstraint(columnNames = {"student_id", "course_id"})` — один отзыв от студента на курс.
 
@@ -363,12 +369,14 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 
 Удаление пользователя **запрещено**, если:
 - Есть активные или архивные записи `Enrollment` (студент записан или был записан на курсы).
-- Есть отправленные решения `Submission` (часть учебной истории).
-- Есть результаты тестов `QuizSubmission`.
+- Есть отправленные решения `Submission` (часть учебной истории, **не реализовано**).
+- Есть результаты тестов `QuizSubmission` (**не реализовано**).
 - Есть оставленные отзывы `CourseReview`.
 - Есть профиль `Profile`.
 
 > Обоснование: пользователь — общий ресурс платформы. Удаление пользователя приведёт к потере учебной истории всех связанных объектов.
+>
+> **Важно:** конечная защита удаления через `@PreRemove`-логику (проверка всех коллекций перед удалением) запланирована на этап 15 и на текущий момент не реализована.
 
 #### Course (Курс)
 
@@ -376,19 +384,23 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 - Есть хотя бы одна запись `Enrollment` со статусом `ACTIVE` (студент сейчас записан).
 - Есть записи `Enrollment` со статусом `DROPPED` (отписавшиеся студенты — часть истории).
 - Есть хотя бы одна запись `CourseReview` (отзывы — часть истории).
-- Есть хотя бы одна `Submission` (решения студентов — часть истории).
-- Есть хотя бы один `QuizSubmission` (результаты тестов — часть истории).
+- Есть хотя бы одна `Submission` (решения студентов — часть истории, **не реализовано**).
+- Есть хотя бы один `QuizSubmission` (результаты тестов — часть истории, **не реализовано**).
 
 Если все вышеперечисленные коллекции пусты — курс **может быть удалён** каскадно вместе с модулями, уроками, заданиями, тестами, вопросами и вариантами ответов.
 
 > Обоснование: курс без записей и учебной истории — пустой контейнер, его удаление безопасно. При наличии записей или истории удаление запрещено.
+>
+> **Важно:** защита учебной истории через `@PreRemove`-логику (проверка коллекций перед удалением) запланирована на этап 15 и на текущий момент не реализована. Фактические ограничения обеспечиваются правилами бизнес-сервисов и внешними ключами БД.
 
 #### Enrollment (Запись на курс)
 
-- Статус `ACTIVE`: можно отписаться (изменить статус на `DROPPED` или удалить запись). При удалении записи — **учебная история сохраняется** (Submissions, QuizSubmissions, CourseReview остаются).
-- Статус `DROPPED`: запись является частью архива истории и **не подлежит удалению**. Можно только прочитать.
+- Статус `ACTIVE`: можно отписаться (изменить статус на `DROPPED`). При отписке — **учебная история сохраняется** (Submissions, QuizSubmissions, CourseReview остаются).
+- Статус `DROPPED`: запись является частью архива истории и **не подлежит удалению** через сервис записи. Можно только прочитать.
 
 > Обоснование: отписка — не удаление. Студент, отписавшийся от курса, сохраняет все свои решения, результаты тестов и отзывы.
+>
+> **Важно:** конечная защита истории (невозможность удаления записей при наличии Submissions/QuizSubmissions/CourseReview) запланирована на этап 15. На текущий момент отписка переводит запись в статус `DROPPED`, но каскадное удаление сущностей этапов 09–13 с защитой истории ещё не реализовано.
 
 #### Submission (Решение задания)
 
@@ -404,21 +416,21 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 
 | № | Требование | Сущность/связь | Покрытие |
 |---|---|---|---|
-| 1 | 15 JPA-сущностей | Все перечислены в п.2 | ✅ |
-| 2 | Связь 1:1 | User ↔ Profile, Module ↔ Quiz | ✅ |
-| 3 | Связь 1:M (множественные) | Все основные ветки модели | ✅ |
+| 1 | 15 JPA-сущностей (проект) | Все перечислены в п.2 | ✅ (9 реализовано, 6 запланировано) |
+| 2 | Связь 1:1 | User ↔ Profile, Module ↔ Quiz | ✅ (Profile реализовано, Quiz — запланировано) |
+| 3 | Связь 1:M (множественные) | Все основные ветки модели | ✅ (реализовано для существующих сущностей) |
 | 4 | Связь M:M | Course ↔ Tag (join table), User ↔ Course (через Enrollment) | ✅ |
 | 5 | course_tag — join table, не сущность | `@JoinTable` в `Course.tags` | ✅ |
 | 6 | Enrollment — сущность-связка | Поля: id, userId, courseId, enrollDate, status | ✅ |
 | 7 | Уникальность записи (студент+курс) | `@UniqueConstraint` в `Enrollment` | ✅ |
-| 8 | Одно решение на задание | `@UniqueConstraint` в `Submission` | ✅ |
+| 8 | Одно решение на задание | `@UniqueConstraint` в `Submission` | ✅ (сущность не реализована) |
 | 9 | Один отзыв на курс | `@UniqueConstraint` в `CourseReview` | ✅ |
-| 10 | Один тест на модуль | `@OneToOne` + `unique = true` в `Quiz.module` | ✅ |
+| 10 | Один тест на модуль | `@OneToOne` + `unique = true` в `Quiz.module` | ✅ (сущность не реализована) |
 | 11 | LAZY для всех коллекций | Все `@OneToMany`, `@ManyToMany` — LAZY | ✅ |
-| 12 | Каскады для учебных материалов | Module→Lesson, Module→Quiz, Lesson→Assignment, Quiz→Question | ✅ |
-| 13 | Защита учебной истории | `@PreRemove` логика в п.4.2 | ✅ |
-| 14 | Курс с историей не удаляется | Проверка всех связанных коллекций | ✅ |
-| 15 | Отписка не удаляет историю | Отдельная операция, не каскад | ✅ |
+| 12 | Каскады для учебных материалов | Module→Lesson, Module→Quiz, Lesson→Assignment, Quiz→Question | ✅ (для реализованных сущностей) |
+| 13 | Защита учебной истории | Бизнес-правила в сервисах, внешние ключи БД; `@PreRemove` — этап 15 | ⚠️ частично (этап 15) |
+| 14 | Курс с историей не удаляется | Проверка коллекций в сервисах | ⚠️ частично (этап 15) |
+| 15 | Отписка не удаляет историю | Отписка → статус DROPPED, не каскад | ✅ |
 | 16 | Общие объекты не удаляются | User, Category, Tag — нет каскадов | ✅ |
 
 ---
@@ -429,8 +441,7 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 erDiagram
     USER {
         long id PK
-        string login UK
-        string password
+        string email UK (column: login)
         string role
     }
 
@@ -591,7 +602,7 @@ MULTIPLE_CHOICE — один или несколько правильных от
 
 ## 8. Примечания по реализации
 
-1. **Ленивая загрузка:** все коллекции (`@OneToMany`, `@ManyToMany`) используют `FetchType.LAZY`. Связи `@ManyToOne` и `@OneToOne` по умолчанию EAGER в Hibernate, но для `Course.teacher` рекомендуется явно указать LAZY для демонстрации проблемы LazyInitializationException.
+1. **Ленивая загрузка:** все коллекции (`@OneToMany`, `@ManyToMany`) используют `FetchType.LAZY`. Связи `@ManyToOne` реализованных сущностей также явно заданы как `LAZY` (кроме `Course.category`, которая загружается `EAGER` как небольшая справочная сущность). `@OneToOne` с стороны `Profile` также `LAZY`.
 
 2. **Генерация ID:** все сущности используют `@GeneratedValue(strategy = GenerationType.IDENTITY)` с PostgreSQL sequences.
 
