@@ -18,6 +18,7 @@ import jakarta.validation.ConstraintViolationException;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 
@@ -34,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Интеграционные тесты для сервисного слоя управления пользователями {@link UserService}.
  * <p>
  * Проверяют создание, чтение, валидацию и обработку дубликатов пользователей
- * через настоящий Spring-бин сервиса в профиле «test» с PostgreSQL через Testcontainers.
+ * через настоящего Spring-бин сервиса в профиле «test» с PostgreSQL через Testcontainers.
  * Также подтверждают, что пользователи, созданные сервисом, корректно используются
  * в существующих сервисах {@link com.studying.platform.service.CourseService}
  * и {@link EnrollmentService}.
@@ -42,6 +44,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>
  * Тесты выполняются без внешней транзакции теста, чтобы проверить поведение
  * реальных сервисных транзакций.
+ * </p>
+ * <p>
+ * Очистка тестовых данных выполняется адресно через {@link TestDataCleanupHelper}
+ * в транзакции {@code @AfterEach}, что гарантирует изоляцию между тестами.
  * </p>
  */
 @SpringBootTest
@@ -97,51 +103,81 @@ class UserServiceTests {
     private DataSource dataSource;
 
     /**
+     * Шаблон транзакции для безопасной очистки данных.
+     */
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
+    /**
+     * Общий помощник для безопасной очистки тестовых данных.
+     */
+    @Autowired
+    private TestDataCleanupHelper cleanupHelper;
+
+    /**
      * Уникальный префикс для тестовых данных, обеспечивающий изоляцию между тестами.
      */
     private String uniquePrefix;
 
     /**
+     * Префикс email для адресного удаления пользователей текущего теста.
+     */
+    private String userEmailPrefix;
+
+    /**
+     * Идентификатор созданного пользователя (отслеживается для адресной очистки).
+     */
+    private Long userId;
+
+    /**
+     * Идентификатор созданной категории (отслеживается для адресной очистки).
+     */
+    private Long categoryId;
+
+    /**
+     * Идентификатор созданного курса (отслеживается для адресной очистки).
+     */
+    private Long courseId;
+
+    /**
+     * Идентификатор созданной записи (отслеживается для адресной очистки).
+     */
+    private Long enrollmentId;
+
+    /**
      * Инициализация уникального префикса перед каждым тестом.
      * <p>
-     * Префикс формируется из идентификатора текущего теста и текущей миллисекунды,
-     * что гарантирует уникальность адресов электронной почты и имён категорий.
+     * Префикс ограничивается 14 символами, чтобы при добавлении suffix
+     * и домена email оставался в пределах 50 символов.
      * </p>
      */
     @BeforeEach
     void setUp() {
         uniquePrefix = "test-" + System.currentTimeMillis() + "-" + new java.util.Random().nextInt(10000);
+        userEmailPrefix = uniquePrefix.substring(0, Math.min(14, uniquePrefix.length()));
     }
 
     /**
-     * Очистка тестовых данных после каждого теста.
+     * Очистка тестовых данных после каждого теста в порядке зависимостей.
      * <p>
-     * Удаляет созданные данные в обратном порядке зависимостей:
-     * записи, курсы, пользователи. Пропускает ошибки, если данные уже удалены.
+     * Удаляет созданные данные через {@link TestDataCleanupHelper} в транзакции.
+     * Пропускаются только те сущности, чьи ID не отслеживались (null).
      * </p>
      */
     @AfterEach
     void tearDown() {
-        try {
-            enrollmentRepository.deleteAll();
-        } catch (Exception ignored) {
-            // Данные уже удалены
-        }
-        try {
-            courseRepository.deleteAll();
-        } catch (Exception ignored) {
-            // Данные уже удалены
-        }
-        try {
-            categoryRepository.deleteAll();
-        } catch (Exception ignored) {
-            // Данные уже удалены
-        }
-        try {
-            userRepository.deleteAll();
-        } catch (Exception ignored) {
-            // Данные уже удалены
-        }
+        cleanupHelper.clearTestEntities(
+                entityManager,
+                transactionTemplate,
+                Set.of(),       // reviewCourseIds — отзывы не создаются
+                courseId != null ? Set.of(courseId) : Set.of(),
+                Set.of(),       // enrollmentUserEmails — записи удаляются по course ID
+                Set.of(),       // lessonIds — уроки не создаются
+                Set.of(),       // moduleIds — модули не создаются
+                courseId != null ? Set.of(courseId) : Set.of(),
+                categoryId != null ? Set.of(categoryId) : Set.of(),
+                userEmailPrefix
+        );
     }
 
     // --- Позитивные сценарии ---
@@ -202,6 +238,7 @@ class UserServiceTests {
     void getUser_shouldReturnExistingUser() {
         String email = uniquePrefix + "-read@example.com";
         User created = userService.createUser(email, UserRole.STUDENT);
+        userId = created.getId();
 
         User found = userService.getUser(created.getId());
 
@@ -220,6 +257,7 @@ class UserServiceTests {
     void getUser_shouldBeAvailableOutsideTransaction() {
         String email = uniquePrefix + "-trans@example.com";
         User created = userService.createUser(email, UserRole.TEACHER);
+        userId = created.getId();
 
         // entityManager.clear() не вызывается — тест работает без внешней транзакции
         User found = userService.getUser(created.getId());
@@ -341,14 +379,17 @@ class UserServiceTests {
         // Создание категории через репозиторий
         Category category = new Category("Информатика");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         // Создание преподавателя через UserService
         String teacherEmail = uniquePrefix + "-course-teacher@example.com";
         User teacher = userService.createUser(teacherEmail, UserRole.TEACHER);
+        userId = teacher.getId();
 
         // Создание курса через CourseRepository напрямую (проверка связи)
         Course course = new Course("Java-курс", "Изучение Java", 40, LocalDate.now().plusDays(30), teacher, category);
         Course saved = courseRepository.saveAndFlush(course);
+        courseId = saved.getId();
 
         assertEquals(teacher.getId(), saved.getTeacher().getId());
         assertEquals(category.getId(), saved.getCategory().getId());
@@ -369,20 +410,25 @@ class UserServiceTests {
         // Создание преподавателя через UserService
         String teacherEmail = uniquePrefix + "-enroll-teacher@example.com";
         User teacher = userService.createUser(teacherEmail, UserRole.TEACHER);
+        userId = teacher.getId();
 
         // Создание категории и курса через репозитории
         Category category = new Category("Математика");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         Course course = new Course("Алгебра", "Основы алгебры", 20, LocalDate.now().plusDays(14), teacher, category);
         course = courseRepository.saveAndFlush(course);
+        courseId = course.getId();
 
         // Создание студента через UserService
         String studentEmail = uniquePrefix + "-enroll-student@example.com";
         User student = userService.createUser(studentEmail, UserRole.STUDENT);
+        userId = student.getId();
 
         // Запись студента через Spring-бин EnrollmentService
         Enrollment enrollment = enrollmentService.enrollStudent(student.getId(), course.getId());
+        enrollmentId = enrollment.getId();
 
         assertNotNull(enrollment.getId());
         assertEquals(EnrollmentStatus.ACTIVE, enrollment.getStatus());

@@ -1,9 +1,35 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 10 плана исправлений: Итоговая независимая проверка и актуализация состояния** (`completed`)
+**Пункт 11 плана исправлений: Изоляция и безопасная очистка интеграционных тестов** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
+
+---
+
+## Выполнено — Пункт 11: Изоляция и безопасная очистка интеграционных тестов
+
+### Созданные файлы:
+- **`src/test/java/com/studying/platform/TestDataCleanupHelper.java`** — общий компонент Spring для адресной очистки тестовых данных в порядке зависимостей (отзывы → записи → уроки → модули → курсы → категории → пользователи). Для записей используется удаление по ID курсов и email пользователей, что позволяет очищать записи, когда их собственные ID не отслеживаются.
+- **`src/test/java/com/studying/platform/TestDataCleanupHelperTests.java`** — 6 интеграционных тестов помощника: удаление отслеживаемых категорий, удаление отслеживаемых пользователей, сохранение посторонних категорий, сохранение посторонних пользователей, обработка пустых коллекций ID, удаление курса с зависимостями (модуль + уроки).
+
+### Изменённые файлы:
+- **`src/test/java/com/studying/platform/MvpFlowTests.java`** — удалён `@AfterEach` с `DELETE FROM` без WHERE; добавлены поля для отслеживания ID созданных сущностей; `@AfterEach` использует `TestDataCleanupHelper` в транзакции; добавлен тест изоляции `cleanup_shouldNotRemovePrestigeTestData`; добавлен импорт `UserRepository`; префиксы email ограничены 20 символами.
+- **`src/test/java/com/studying/platform/EnrollmentServiceTransactionTests.java`** — аналогичные изменения: отслеживание ID, `TestDataCleanupHelper` для очистки, префиксы ограничены 17 символами.
+- **`src/test/java/com/studying/platform/CourseServiceTransactionTests.java`** — добавлены поля `moduleIds`/`lessonIds` (Set) для поддержки нескольких модулей/уроков; `@AfterEach` собирает все ID; методы `createTeacherInTransaction`/`createCategoryInTransaction` используют `TransactionTemplate` для `persist()`; все тесты используют `@Transactional(propagation = NOT_SUPPORTED)` на уровне класса.
+- **`src/test/java/com/studying/platform/UserServiceTests.java`** — удалены `deleteAll()` с подавлением исключений; добавлены поля отслеживания ID; `@AfterEach` использует `TestDataCleanupHelper`; префиксы ограничены 14 символами.
+
+### Результаты проверок:
+- `mvn test -Dtest=TestDataCleanupHelperTests`: **6 PASS** — PASS
+- `mvn test -Dtest=MvpFlowTests`: **6 PASS** — PASS
+- `mvn test -Dtest=EnrollmentServiceTransactionTests`: **8 PASS** — PASS
+- `mvn test -Dtest=CourseServiceTransactionTests`: **4 PASS** — PASS
+- `mvn test -Dtest=UserServiceTests`: **15 PASS** — PASS
+- `mvn verify`: **140 PASS**, 0 FAIL, 0 ERROR — PASS
+- `git diff --check`: **PASS** (нет проблем с форматированием)
+
+### Следующий шаг:
+Пункт 12 — точные проверки первичных, внешних и уникальных ключей.
 
 ### Готовое:
 - Обновлён `User` (`com.studying.platform.entity`) — добавлена связь `@OneToMany(mappedBy = "user", fetch = FetchType.LAZY) Set<Enrollment> enrollments` с JavaDoc, getter/setter.

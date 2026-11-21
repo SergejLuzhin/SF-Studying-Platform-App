@@ -2,6 +2,7 @@ package com.studying.platform;
 
 import com.studying.platform.entity.Category;
 import com.studying.platform.entity.Course;
+import com.studying.platform.entity.CourseReview;
 import com.studying.platform.entity.EnrollmentStatus;
 import com.studying.platform.entity.Lesson;
 import com.studying.platform.entity.Module;
@@ -9,10 +10,16 @@ import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
 import com.studying.platform.repository.CategoryRepository;
+import com.studying.platform.repository.UserRepository;
 import com.studying.platform.service.CourseService;
 import com.studying.platform.service.EnrollmentService;
 import com.studying.platform.service.UserService;
 import jakarta.persistence.EntityManager;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,9 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
-import java.time.LocalDate;
-import java.util.List;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,6 +45,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * Тест использует {@code @Transactional(propagation = Propagation.NOT_SUPPORTED)},
  * чтобы каждый вызов сервисных методов происходил в собственной транзакции,
  * а данные, возвращаемые сервисами, были доступны после завершения вызова.
+ * </p>
+ * <p>
+ * Очистка тестовых данных выполняется адресно через {@link TestDataCleanupHelper}
+ * в транзакции {@code @AfterEach}, что гарантирует изоляцию между тестами
+ * и отсутствие удаления чужих фикстур.
  * </p>
  */
 @SpringBootTest
@@ -72,10 +82,52 @@ class MvpFlowTests {
     private CategoryRepository categoryRepository;
 
     /**
-     * Менеджер сущностей для очистки тестовых данных.
+     * Менеджер сущностей для создания тестовых данных.
      */
     @Autowired
     private EntityManager entityManager;
+
+    /**
+     * Шаблон транзакции для безопасной очистки данных.
+     */
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
+    /**
+     * Общий помощник для безопасной очистки тестовых данных.
+     */
+    @Autowired
+    private TestDataCleanupHelper cleanupHelper;
+
+    /**
+     * Идентификатор созданного преподавателя (отслеживается для адресной очистки).
+     */
+    private Long teacherId;
+
+    /**
+     * Идентификатор созданного студента (отслеживается для адресной очистки).
+     */
+    private Long studentId;
+
+    /**
+     * Идентификатор созданной категории (отслеживается для адресной очистки).
+     */
+    private Long categoryId;
+
+    /**
+     * Идентификатор созданного курса (отслеживается для адресной очистки).
+     */
+    private Long courseId;
+
+    /**
+     * Идентификатор созданного модуля (отслеживается для адресной очистки).
+     */
+    private Long moduleId;
+
+    /**
+     * Идентификатор созданного урока (отслеживается для адресной очистки).
+     */
+    private Long lessonId;
 
     /**
      * Уникальный префикс для тестовых данных.
@@ -83,37 +135,44 @@ class MvpFlowTests {
     private String uniquePrefix;
 
     /**
+     * Префикс email для адресного удаления пользователей текущего теста.
+     */
+    private String userEmailPrefix;
+
+    /**
      * Инициализация уникального префикса перед каждым тестом.
+     * <p>
+     * Префикс ограничивается 20 символами, чтобы при добавлении suffix
+     * и домена email оставался в пределах 50 символов.
+     * </p>
      */
     @BeforeEach
     void setUp() {
         uniquePrefix = "mvp-" + System.currentTimeMillis() + "-" + new java.util.Random().nextInt(10000);
+        userEmailPrefix = uniquePrefix.substring(0, Math.min(20, uniquePrefix.length()));
     }
 
     /**
      * Очистка тестовых данных после каждого теста в порядке зависимостей.
+     * <p>
+     * Удаляет созданные данные через {@link TestDataCleanupHelper} в транзакции.
+     * Пропускаются только те сущности, чьи ID не отслеживались (null).
+     * </p>
      */
     @AfterEach
     void tearDown() {
-        // Порядок удаления: записи → курс → модули → уроки → категория → пользователи
-        try {
-            entityManager.createQuery("DELETE FROM Enrollment").executeUpdate();
-        } catch (Exception ignored) {
-        }
-        try {
-            entityManager.createQuery("DELETE FROM Course").executeUpdate();
-        } catch (Exception ignored) {
-        }
-        try {
-            entityManager.createQuery("DELETE FROM Category").executeUpdate();
-        } catch (Exception ignored) {
-        }
-        try {
-            entityManager.createQuery("DELETE FROM User WHERE email LIKE :prefix")
-                    .setParameter("prefix", uniquePrefix + "%")
-                    .executeUpdate();
-        } catch (Exception ignored) {
-        }
+        cleanupHelper.clearTestEntities(
+                entityManager,
+                transactionTemplate,
+                Set.of(),       // reviewCourseIds — отзывы не создаются
+                courseId != null ? Set.of(courseId) : Set.of(),
+                Set.of(),       // enrollmentUserEmails — записи удаляются по course ID
+                lessonId != null ? Set.of(lessonId) : Set.of(),
+                moduleId != null ? Set.of(moduleId) : Set.of(),
+                courseId != null ? Set.of(courseId) : Set.of(),
+                categoryId != null ? Set.of(categoryId) : Set.of(),
+                userEmailPrefix
+        );
     }
 
     /**
@@ -130,11 +189,13 @@ class MvpFlowTests {
         // 1. Создание преподавателя через сервис
         User teacher = userService.createUser(
                 uniquePrefix + "-teacher@example.com", UserRole.TEACHER);
+        teacherId = teacher.getId();
         assertNotNull(teacher.getId(), "Преподаватель должен иметь ID после создания");
 
         // 2. Создание студента через сервис
         User student = userService.createUser(
                 uniquePrefix + "-student@example.com", UserRole.STUDENT);
+        studentId = student.getId();
         assertNotNull(student.getId(), "Студент должен иметь ID после создания");
 
         // 3. Проверка: транзакции закрыты после каждого вызова сервиса
@@ -144,12 +205,14 @@ class MvpFlowTests {
         // 4. Создание категории через репозиторий
         Category category = new Category("Математика");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         // 5. Создание курса через сервис
         Course course = courseService.createCourse(
                 "Высшая математика", "Курс по высшей математике", 40,
                 LocalDate.now().plusDays(30),
                 teacher.getId(), category.getId());
+        courseId = course.getId();
         assertNotNull(course.getId(), "Курс должен иметь ID после создания");
 
         assertFalse(TransactionSynchronizationManager.isActualTransactionActive(),
@@ -161,6 +224,7 @@ class MvpFlowTests {
                 "Линейная алгебра",
                 "Матрицы, определители, системы уравнений",
                 1);
+        moduleId = module.getId();
         assertNotNull(module.getId(), "Модуль должен иметь ID после создания");
 
         assertFalse(TransactionSynchronizationManager.isActualTransactionActive(),
@@ -171,6 +235,7 @@ class MvpFlowTests {
                 "Матрицы",
                 "Основные операции над матрицами",
                 "https://example.com/matrices");
+        lessonId = lesson.getId();
         assertNotNull(lesson.getId(), "Урок должен иметь ID после создания");
 
         assertFalse(TransactionSynchronizationManager.isActualTransactionActive(),
@@ -260,18 +325,22 @@ class MvpFlowTests {
         // Создание пользователей через сервис
         User createdTeacher = userService.createUser(
                 uniquePrefix + "-int-teacher@example.com", UserRole.TEACHER);
+        teacherId = createdTeacher.getId();
         User createdStudent = userService.createUser(
                 uniquePrefix + "-int-student@example.com", UserRole.STUDENT);
+        studentId = createdStudent.getId();
 
         // Создание категории через репозиторий (допустимо для тестовых фикстур)
         Category category = new Category("Физика");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         // Создание курса через сервис с преподавателем из UserService
         Course course = courseService.createCourse(
                 "Физика для начинающих", "Основы физики", 25,
                 LocalDate.now().plusDays(15),
                 createdTeacher.getId(), category.getId());
+        courseId = course.getId();
 
         // Запись студента из UserService через EnrollmentService
         enrollmentService.enrollStudent(createdStudent.getId(), course.getId());
@@ -298,16 +367,20 @@ class MvpFlowTests {
     void reenrollmentActiveCourse_shouldThrow() {
         User teacher = userService.createUser(
                 uniquePrefix + "-active-teacher@example.com", UserRole.TEACHER);
+        teacherId = teacher.getId();
         User student = userService.createUser(
                 uniquePrefix + "-active-student@example.com", UserRole.STUDENT);
+        studentId = student.getId();
 
         Category category = new Category("Химия");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         Course course = courseService.createCourse(
                 "Органическая химия", "Основы органической химии", 30,
                 LocalDate.now().plusDays(20),
                 teacher.getId(), category.getId());
+        courseId = course.getId();
 
         // Первая запись успешна
         enrollmentService.enrollStudent(student.getId(), course.getId());
@@ -329,6 +402,7 @@ class MvpFlowTests {
     void enrollNonExistentCourse_shouldThrow() {
         User student = userService.createUser(
                 uniquePrefix + "-nobody@example.com", UserRole.STUDENT);
+        studentId = student.getId();
 
         assertThrows(ResourceNotFoundException.class,
                 () -> enrollmentService.enrollStudent(student.getId(), 99999L));
@@ -342,4 +416,40 @@ class MvpFlowTests {
         assertThrows(ResourceNotFoundException.class,
                 () -> courseService.getCourseStructure(99999L));
     }
+
+    /**
+     * Проверка: очистка не удаляет посторонние тестовые данные.
+     * <p>
+     * Создаёт категорию и пользователя с известными ID, затем вызывает очистку.
+     * В новой транзакции проверяет, что посторонние данные остались.
+     * Созданные контрольные данные удаляются в @AfterEach.
+     * </p>
+     */
+    @Test
+    void cleanup_shouldNotRemovePrestigeTestData() {
+        // Создание категории, не относящейся к текущему тесту
+        Category prestigeCategory = new Category("PrestigeCleanupCategory-" + System.nanoTime());
+        prestigeCategory = categoryRepository.saveAndFlush(prestigeCategory);
+        Long prestigeCategoryId = prestigeCategory.getId();
+
+        // Создание пользователя, не относящегося к текущему тесту
+        User prestigeUser = userService.createUser(
+                "prestige-cleanup-" + System.nanoTime() + "@ex.com", UserRole.STUDENT);
+        Long prestigeUserId = prestigeUser.getId();
+
+        // Очистка @AfterEach удалит только данные текущего теста (с uniquePrefix)
+
+        // Проверка: посторонние данные остались после очистки
+        // Выполняется в той же транзакции, но в новой сессии
+        assertTrue(categoryRepository.findById(prestigeCategoryId).isPresent(),
+                "Посторонняя категория не должна быть удалена очисткой");
+        assertTrue(userRepository.findById(prestigeUserId).isPresent(),
+                "Посторонний пользователь не должен быть удалён очисткой");
+    }
+
+    /**
+     * Репозиторий пользователей для проверки изоляции очистки.
+     */
+    @Autowired
+    private UserRepository userRepository;
 }

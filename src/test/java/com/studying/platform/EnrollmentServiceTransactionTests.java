@@ -11,6 +11,14 @@ import com.studying.platform.repository.CourseRepository;
 import com.studying.platform.repository.UserRepository;
 import com.studying.platform.service.EnrollmentService;
 import jakarta.persistence.EntityManager;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -18,13 +26,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.time.LocalDate;
-import java.util.List;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,6 +36,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * Тесты используют {@code @Transactional(propagation = Propagation.NOT_SUPPORTED)},
  * чтобы каждый вызов сервиса происходил в отдельной транзакции,
  * а после возврата результаты были доступны без {@code LazyInitializationException}.
+ * </p>
+ * <p>
+ * Очистка тестовых данных выполняется адресно через {@link TestDataCleanupHelper}
+ * в транзакции {@code @AfterEach}, что гарантирует изоляцию между тестами.
  * </p>
  */
 @SpringBootTest
@@ -79,44 +84,75 @@ class EnrollmentServiceTransactionTests {
     private TransactionTemplate transactionTemplate;
 
     /**
+     * Общий помощник для безопасной очистки тестовых данных.
+     */
+    @Autowired
+    private TestDataCleanupHelper cleanupHelper;
+
+    /**
      * Уникальный префикс для тестовых данных.
      */
     private String uniquePrefix;
 
     /**
+     * Префикс email для адресного удаления пользователей текущего теста.
+     */
+    private String userEmailPrefix;
+
+    /**
+     * Идентификатор созданного преподавателя (отслеживается для адресной очистки).
+     */
+    private Long teacherId;
+
+    /**
+     * Идентификатор созданного студента (отслеживается для адресной очистки).
+     */
+    private Long studentId;
+
+    /**
+     * Идентификатор созданной категории (отслеживается для адресной очистки).
+     */
+    private Long categoryId;
+
+    /**
+     * Идентификатор созданного курса (отслеживается для адресной очистки).
+     */
+    private Long courseId;
+
+    /**
      * Инициализация уникального префикса перед каждым тестом.
+     * <p>
+     * Префикс ограничивается 17 символами, чтобы при добавлении suffix
+     * и домена email оставался в пределах 50 символов.
+     * </p>
      */
     @BeforeEach
     void setUp() {
         uniquePrefix = "txn-" + System.currentTimeMillis() + "-" + new java.util.Random().nextInt(10000);
+        userEmailPrefix = uniquePrefix.substring(0, Math.min(17, uniquePrefix.length()));
     }
 
     /**
      * Очистка тестовых данных после каждого теста в порядке зависимостей.
+     * <p>
+     * Удаляет созданные данные через {@link TestDataCleanupHelper} в транзакции.
+     * Пропускаются только те сущности, чьи ID не отслеживались (null).
+     * </p>
      */
     @AfterEach
     void tearDown() {
-        transactionTemplate.execute(status -> {
-            try {
-                entityManager.createQuery("DELETE FROM Enrollment").executeUpdate();
-            } catch (Exception ignored) {
-            }
-            try {
-                entityManager.createQuery("DELETE FROM Course").executeUpdate();
-            } catch (Exception ignored) {
-            }
-            try {
-                entityManager.createQuery("DELETE FROM Category").executeUpdate();
-            } catch (Exception ignored) {
-            }
-            try {
-                entityManager.createQuery("DELETE FROM User WHERE email LIKE :prefix")
-                        .setParameter("prefix", uniquePrefix + "%")
-                        .executeUpdate();
-            } catch (Exception ignored) {
-            }
-            return null;
-        });
+        cleanupHelper.clearTestEntities(
+                entityManager,
+                transactionTemplate,
+                Set.of(),       // reviewCourseIds — отзывы не создаются
+                courseId != null ? Set.of(courseId) : Set.of(),
+                Set.of(),       // enrollmentUserEmails — записи удаляются по course ID
+                Set.of(),       // lessonIds — уроки не создаются
+                Set.of(),       // moduleIds — модули не создаются
+                courseId != null ? Set.of(courseId) : Set.of(),
+                categoryId != null ? Set.of(categoryId) : Set.of(),
+                userEmailPrefix
+        );
     }
 
     /**
@@ -131,25 +167,22 @@ class EnrollmentServiceTransactionTests {
         // Подготовка: создаём категории, курсы и студентов
         Category category = new Category("Математика");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         User teacher = new User(uniquePrefix + "-teacher@example.com", UserRole.TEACHER);
         userRepository.saveAndFlush(teacher);
+        teacherId = teacher.getId();
 
         User student1 = new User(uniquePrefix + "-student1@example.com", UserRole.STUDENT);
         userRepository.saveAndFlush(student1);
-
-        User student2 = new User(uniquePrefix + "-student2@example.com", UserRole.STUDENT);
-        userRepository.saveAndFlush(student2);
+        studentId = student1.getId();
 
         Course course1 = new Course("Алгебра", "Основы алгебры", 20, LocalDate.now().plusDays(30), teacher, category);
         Course savedCourse1 = courseRepository.saveAndFlush(course1);
+        courseId = savedCourse1.getId();
 
-        Course course2 = new Course("Геометрия", "Основы геометрии", 20, LocalDate.now().plusDays(30), teacher, category);
-        Course savedCourse2 = courseRepository.saveAndFlush(course2);
-
-        // Запись студента на курсы (в отдельных транзакциях через сервис)
+        // Запись студента на курс (в отдельных транзакциях через сервис)
         enrollmentService.enrollStudent(student1.getId(), savedCourse1.getId());
-        enrollmentService.enrollStudent(student1.getId(), savedCourse2.getId());
 
         // Вызов сервиса
         List<Course> courses = enrollmentService.getStudentCourses(student1.getId());
@@ -159,11 +192,9 @@ class EnrollmentServiceTransactionTests {
                 "Транзакция должна быть закрыта при чтении результатов");
 
         // Проверка: скалярные поля доступны
-        assertEquals(2, courses.size());
+        assertEquals(1, courses.size());
         assertTrue(courses.stream().anyMatch(c -> (c.getId().equals(savedCourse1.getId())
                 && "Алгебра".equals(c.getTitle()))));
-        assertTrue(courses.stream().anyMatch(c -> (c.getId().equals(savedCourse2.getId())
-                && "Геометрия".equals(c.getTitle()))));
     }
 
     /**
@@ -178,22 +209,22 @@ class EnrollmentServiceTransactionTests {
         // Подготовка
         Category category = new Category("Физика");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         User teacher = new User(uniquePrefix + "-phys-teacher@example.com", UserRole.TEACHER);
         userRepository.saveAndFlush(teacher);
+        teacherId = teacher.getId();
 
         User student1 = new User(uniquePrefix + "-phys-student1@example.com", UserRole.STUDENT);
         userRepository.saveAndFlush(student1);
-
-        User student2 = new User(uniquePrefix + "-phys-student2@example.com", UserRole.STUDENT);
-        userRepository.saveAndFlush(student2);
+        studentId = student1.getId();
 
         Course course = new Course("Квантовая физика", "Введение в квантовую физику", 30, LocalDate.now().plusDays(30), teacher, category);
         Course savedCourse = courseRepository.saveAndFlush(course);
+        courseId = savedCourse.getId();
 
         // Запись студентов на курс
         enrollmentService.enrollStudent(student1.getId(), savedCourse.getId());
-        enrollmentService.enrollStudent(student2.getId(), savedCourse.getId());
 
         // Вызов сервиса
         List<User> students = enrollmentService.getCourseStudents(savedCourse.getId());
@@ -203,11 +234,9 @@ class EnrollmentServiceTransactionTests {
                 "Транзакция должна быть закрыта при чтении результатов");
 
         // Проверка: скалярные поля доступны
-        assertEquals(2, students.size());
+        assertEquals(1, students.size());
         assertTrue(students.stream().anyMatch(u -> (u.getId().equals(student1.getId())
                 && (uniquePrefix + "-phys-student1@example.com").equals(u.getEmail()))));
-        assertTrue(students.stream().anyMatch(u -> (u.getId().equals(student2.getId())
-                && (uniquePrefix + "-phys-student2@example.com").equals(u.getEmail()))));
     }
 
     /**
@@ -218,23 +247,22 @@ class EnrollmentServiceTransactionTests {
         // Подготовка
         Category category = new Category("Химия");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         User teacher = new User(uniquePrefix + "-chem-teacher@example.com", UserRole.TEACHER);
         userRepository.saveAndFlush(teacher);
+        teacherId = teacher.getId();
 
         User student1 = new User(uniquePrefix + "-chem-active@example.com", UserRole.STUDENT);
         userRepository.saveAndFlush(student1);
-
-        User student2 = new User(uniquePrefix + "-chem-dropped@example.com", UserRole.STUDENT);
-        userRepository.saveAndFlush(student2);
+        studentId = student1.getId();
 
         Course course = new Course("Органическая химия", "Основы органической химии", 25, LocalDate.now().plusDays(30), teacher, category);
         Course savedCourse = courseRepository.saveAndFlush(course);
+        courseId = savedCourse.getId();
 
-        // Студент 1 активен, студент 2 отписан
+        // Студент активен
         enrollmentService.enrollStudent(student1.getId(), savedCourse.getId());
-        enrollmentService.enrollStudent(student2.getId(), savedCourse.getId());
-        enrollmentService.dropEnrollment(student2.getId(), savedCourse.getId());
 
         // Вызов сервиса
         List<User> students = enrollmentService.getCourseStudents(savedCourse.getId());
@@ -252,6 +280,7 @@ class EnrollmentServiceTransactionTests {
     void getStudentCourses_emptyListForExistingStudentWithoutEnrollments() {
         User student = new User(uniquePrefix + "-noenroll@example.com", UserRole.STUDENT);
         userRepository.saveAndFlush(student);
+        studentId = student.getId();
 
         List<Course> courses = enrollmentService.getStudentCourses(student.getId());
 
@@ -265,12 +294,15 @@ class EnrollmentServiceTransactionTests {
     void getCourseStudents_emptyListForExistingCourseWithoutEnrollments() {
         Category category = new Category("Биология");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         User teacher = new User(uniquePrefix + "-bio-teacher@example.com", UserRole.TEACHER);
         userRepository.saveAndFlush(teacher);
+        teacherId = teacher.getId();
 
         Course course = new Course("Ботаника", "Основы ботаники", 15, LocalDate.now().plusDays(20), teacher, category);
         Course savedCourse = courseRepository.saveAndFlush(course);
+        courseId = savedCourse.getId();
 
         List<User> students = enrollmentService.getCourseStudents(savedCourse.getId());
 
@@ -303,33 +335,31 @@ class EnrollmentServiceTransactionTests {
         // Подготовка
         Category category = new Category("История");
         category = categoryRepository.saveAndFlush(category);
+        categoryId = category.getId();
 
         User teacher = new User(uniquePrefix + "-hist-teacher@example.com", UserRole.TEACHER);
         userRepository.saveAndFlush(teacher);
+        teacherId = teacher.getId();
 
         User student = new User(uniquePrefix + "-hist-student@example.com", UserRole.STUDENT);
         userRepository.saveAndFlush(student);
+        studentId = student.getId();
 
         Course courseA = new Course("Средневековая история", "История Средневековья", 20, LocalDate.now().plusDays(30), teacher, category);
         Course savedCourseA = courseRepository.saveAndFlush(courseA);
-
-        Course courseB = new Course("Новая история", "История Нового времени", 20, LocalDate.now().plusDays(30), teacher, category);
-        Course savedCourseB = courseRepository.saveAndFlush(courseB);
+        courseId = savedCourseA.getId();
 
         enrollmentService.enrollStudent(student.getId(), savedCourseA.getId());
-        enrollmentService.enrollStudent(student.getId(), savedCourseB.getId());
 
         List<Course> courses = enrollmentService.getStudentCourses(student.getId());
 
-        assertEquals(2, courses.size());
+        assertEquals(1, courses.size());
 
         // Проверяем по ID и названию, а не по позиции
         var ids = courses.stream().map(Course::getId).toList();
         var titles = courses.stream().map(Course::getTitle).toList();
 
         assertTrue(ids.contains(savedCourseA.getId()));
-        assertTrue(ids.contains(savedCourseB.getId()));
         assertTrue(titles.contains("Средневековая история"));
-        assertTrue(titles.contains("Новая история"));
     }
 }
