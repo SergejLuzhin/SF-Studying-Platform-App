@@ -1,5 +1,6 @@
 package com.studying.platform.entity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -20,10 +21,12 @@ import java.util.Set;
  * Сущность «Модуль курса» учебной платформы.
  * <p>
  * Тематический раздел внутри курса, содержащий уроки и, опционально, тест.
- * Связь с курсом — «многие-к-одному». Владелец связи — {@link Course}.
+ * Связь с курсом — «многие-к-одному». Связь с уроками — «один-ко-многим»
+ * с каскадными операциями удаления. Владелец связи с курсом — {@link Course}.
  * </p>
  *
  * @see Course
+ * @see Lesson
  */
 @Entity
 @Table(name = "modules")
@@ -62,6 +65,16 @@ public class Module {
     @JoinColumn(name = "course_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_module_course"))
     private Course course;
+
+    /**
+     * Уроки модуля. Загружаются лениво, каскадные операции PERSIST, MERGE, REMOVE
+     * включены. При удалении модуля все его уроки удаляются автоматически
+     * благодаря {@code orphanRemoval = true}. Владелец обратной связи — {@link Lesson}.
+     */
+    @OneToMany(mappedBy = "module", fetch = FetchType.LAZY,
+            cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE},
+            orphanRemoval = true)
+    private Set<Lesson> lessons = new HashSet<>();
 
     /**
      * Публичный конструктор по умолчанию, требуемый JPA-провайдером.
@@ -172,5 +185,23 @@ public class Module {
      */
     public void setCourse(Course course) {
         this.course = course;
+    }
+
+    /**
+     * Возвращает коллекцию уроков модуля.
+     *
+     * @return коллекция уроков
+     */
+    public Set<Lesson> getLessons() {
+        return lessons;
+    }
+
+    /**
+     * Устанавливает коллекцию уроков модуля.
+     *
+     * @param lessons коллекция уроков
+     */
+    public void setLessons(Set<Lesson> lessons) {
+        this.lessons = lessons;
     }
 }
