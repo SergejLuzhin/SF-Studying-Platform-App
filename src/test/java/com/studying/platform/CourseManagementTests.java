@@ -467,6 +467,236 @@ class CourseManagementTests {
     }
 
     /**
+     * Тест: создание курса с нулевой продолжительностью.
+     * <p>
+     * Проверяет, что при вызове createCourse с duration = 0
+     * выбрасывается IllegalArgumentException.
+     * </p>
+     */
+    @Test
+    void createCourse_withZeroDuration_shouldThrow() {
+        User teacher = createTeacher("createteacherzeroduration@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseService.createCourse(
+                        "Курс", "Описание", 0,
+                        LocalDate.of(2026, 9, 1),
+                        teacher.getId(),
+                        category.getId()
+                ),
+                "Должно быть выброшено IllegalArgumentException при нулевой продолжительности"
+        );
+        assertTrue(exception.getMessage().contains("не менее 1 часа"),
+                "Сообщение исключения должно содержать информацию о минимальной продолжительности");
+    }
+
+    /**
+     * Тест: создание курса с отрицательной продолжительностью.
+     * <p>
+     * Проверяет, что при вызове createCourse с отрицательным duration
+     * выбрасывается IllegalArgumentException.
+     * </p>
+     */
+    @Test
+    void createCourse_withNegativeDuration_shouldThrow() {
+        User teacher = createTeacher("createteacherneg@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseService.createCourse(
+                        "Курс", "Описание", -5,
+                        LocalDate.of(2026, 9, 1),
+                        teacher.getId(),
+                        category.getId()
+                ),
+                "Должно быть выброшено IllegalArgumentException при отрицательной продолжительности"
+        );
+        assertTrue(exception.getMessage().contains("не менее 1 часа"),
+                "Сообщение исключения должно содержать информацию о минимальной продолжительности");
+    }
+
+    /**
+     * Тест: создание курса с минимальной допустимой продолжительностью 1 час.
+     * <p>
+     * Проверяет, что при duration = 1 курс создаётся успешно.
+     * </p>
+     */
+    @Test
+    void createCourse_withMinimumDuration_shouldSucceed() {
+        User teacher = createTeacher("createteachermin@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        Course course = courseService.createCourse(
+                "Минимальный курс", "Курс на 1 час", 1,
+                LocalDate.of(2026, 9, 1),
+                teacher.getId(),
+                category.getId()
+        );
+
+        assertNotNull(course.getId(), "Идентификатор курса не должен быть null");
+        assertEquals(1, course.getDuration(), "Продолжительность должна быть равна 1");
+    }
+
+    /**
+     * Тест: обновление курса с нулевой продолжительностью.
+     * <p>
+     * Проверяет, что при вызове updateCourse с duration = 0
+     * выбрасывается IllegalArgumentException и данные не меняются.
+     * </p>
+     */
+    @Test
+    void updateCourse_withZeroDuration_shouldThrow() {
+        User teacher = createTeacher("updateteacherzeroduration@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        Course course = courseService.createCourse(
+                "Исходный курс", "Описание", 20,
+                LocalDate.of(2026, 9, 1),
+                teacher.getId(),
+                category.getId()
+        );
+
+        Long courseId = course.getId();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseService.updateCourse(
+                        courseId,
+                        "Новый заголовок",
+                        "Новое описание",
+                        0,
+                        LocalDate.of(2026, 10, 1)
+                ),
+                "Должно быть выброшено IllegalArgumentException при нулевой продолжительности"
+        );
+        assertTrue(exception.getMessage().contains("не менее 1 часа"),
+                "Сообщение исключения должно содержать информацию о минимальной продолжительности");
+
+        // Проверка: данные не изменились
+        Course unchanged = courseRepository.findById(courseId).orElseThrow();
+        assertEquals("Исходный курс", unchanged.getTitle(),
+                "Название не должно измениться после ошибочного обновления");
+        assertEquals(20, unchanged.getDuration(),
+                "Продолжительность не должна измениться после ошибочного обновления");
+    }
+
+    /**
+     * Тест: обновление курса с отрицательной продолжительностью.
+     * <p>
+     * Проверяет, что при вызове updateCourse с отрицательным duration
+     * выбрасывается IllegalArgumentException и данные не меняются.
+     * </p>
+     */
+    @Test
+    void updateCourse_withNegativeDuration_shouldThrow() {
+        User teacher = createTeacher("updateteacherneg@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        Course course = courseService.createCourse(
+                "Исходный курс", "Описание", 20,
+                LocalDate.of(2026, 9, 1),
+                teacher.getId(),
+                category.getId()
+        );
+
+        Long courseId = course.getId();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseService.updateCourse(
+                        courseId,
+                        "Новый заголовок",
+                        "Новое описание",
+                        -10,
+                        LocalDate.of(2026, 10, 1)
+                ),
+                "Должно быть выброшено IllegalArgumentException при отрицательной продолжительности"
+        );
+        assertTrue(exception.getMessage().contains("не менее 1 часа"),
+                "Сообщение исключения должно содержать информацию о минимальной продолжительности");
+
+        // Проверка: данные не изменились
+        Course unchanged = courseRepository.findById(courseId).orElseThrow();
+        assertEquals("Исходный курс", unchanged.getTitle(),
+                "Название не должно измениться после ошибочного обновления");
+        assertEquals(20, unchanged.getDuration(),
+                "Продолжительность не должна измениться после ошибочного обновления");
+    }
+
+    /**
+     * Тест: обновление курса с минимальной допустимой продолжительностью 1 час.
+     * <p>
+     * Проверяет, что при duration = 1 обновление проходит успешно.
+     * </p>
+     */
+    @Test
+    void updateCourse_withMinimumDuration_shouldSucceed() {
+        User teacher = createTeacher("updateteachermin@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        Course course = courseService.createCourse(
+                "Курс", "Описание", 30,
+                LocalDate.of(2026, 9, 1),
+                teacher.getId(),
+                category.getId()
+        );
+
+        Long courseId = course.getId();
+
+        Course updated = courseService.updateCourse(
+                courseId,
+                "Обновлённый курс",
+                "Новое описание",
+                1,
+                LocalDate.of(2026, 10, 1)
+        );
+
+        assertEquals(1, updated.getDuration(), "Продолжительность должна быть 1 час");
+        assertEquals("Обновлённый курс", updated.getTitle(), "Название должно обновиться");
+
+        Course fromRepo = courseRepository.findById(courseId).orElseThrow();
+        assertEquals(1, fromRepo.getDuration(), "Продолжительность сохранена в БД");
+    }
+
+    /**
+     * Тест: обновление курса с null продолжительностью сохраняет прежнее значение.
+     * <p>
+     * Проверяет, что передача null в duration не меняет поле —
+     * это означает «не изменять продолжительность».
+     * </p>
+     */
+    @Test
+    void updateCourse_withNullDuration_shouldPreserveValue() {
+        User teacher = createTeacher("updateteachernull@example.com");
+        Category category = createCategory("Тестовая категория");
+
+        Course course = courseService.createCourse(
+                "Курс", "Описание", 25,
+                LocalDate.of(2026, 9, 1),
+                teacher.getId(),
+                category.getId()
+        );
+
+        Long courseId = course.getId();
+
+        Course updated = courseService.updateCourse(
+                courseId,
+                "Новое название",
+                "Новое описание",
+                null,
+                LocalDate.of(2026, 10, 1)
+        );
+
+        assertEquals(25, updated.getDuration(),
+                "Продолжительность должна остаться прежней при null");
+        assertEquals("Новое название", updated.getTitle(),
+                "Другие поля должны обновиться");
+    }
+
+    /**
      * Проверка, что в тестах используется PostgreSQL через Testcontainers.
      * <p>
      * Гарантирует, что {@code @DataJpaTest} с {@code @AutoConfigureTestDatabase(replace = NONE)}

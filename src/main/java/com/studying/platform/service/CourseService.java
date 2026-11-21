@@ -90,11 +90,27 @@ public class CourseService {
     }
 
     /**
+     * Проверяет корректность продолжительности курса.
+     * <p>
+     * Если значение равно {@code null} или меньше единицы —
+     * выбрасывает {@link IllegalArgumentException} с понятным сообщением об ошибке.
+     * </p>
+     *
+     * @param duration продолжительность в часах
+     * @throws IllegalArgumentException если продолжительность null или меньше 1
+     */
+    private void validateDuration(Integer duration) {
+        if (duration == null || duration < 1) {
+            throw new IllegalArgumentException("Продолжительность курса должна быть не менее 1 часа");
+        }
+    }
+
+    /**
      * Создаёт новый курс с заданными параметрами.
      * <p>
-     * Проверяет существование преподавателя и его роль TEACHER,
+     * Проверяет продолжительность, существование преподавателя и его роль TEACHER,
      * а также существование категории. Если проверка не пройдена —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * выбрасывает {@link IllegalArgumentException} или {@link ResourceNotFoundException}.
      * </p>
      *
      * @param title       название курса
@@ -104,11 +120,14 @@ public class CourseService {
      * @param teacherId   идентификатор преподавателя
      * @param categoryId  идентификатор категории
      * @return сохранённый курс
+     * @throws IllegalArgumentException если продолжительность меньше 1 часа
      * @throws ResourceNotFoundException если преподаватель или категория не найдены,
      *                                   или роль преподавателя не TEACHER
      */
     public Course createCourse(String title, String description, Integer duration,
                                LocalDate startDate, Long teacherId, Long categoryId) {
+        validateDuration(duration);
+
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Преподаватель с идентификатором " + teacherId + " не найден"));
@@ -133,6 +152,8 @@ public class CourseService {
      * <p>
      * Проверяет существование курса по идентификатору.
      * Обновляет доступные поля: название, описание, продолжительность, дата начала.
+     * Продолжительность проверяется только при не-{@code null} значении;
+     * {@code null} означает «не изменять продолжительность».
      * </p>
      *
      * @param courseId    идентификатор курса для обновления
@@ -141,6 +162,7 @@ public class CourseService {
      * @param duration    новая продолжительность в часах
      * @param startDate   новая дата начала курса
      * @return обновлённый курс
+     * @throws IllegalArgumentException если передана некорректная продолжительность
      * @throws ResourceNotFoundException если курс с заданным идентификатором не найден
      */
     public Course updateCourse(Long courseId, String title, String description,
@@ -148,6 +170,10 @@ public class CourseService {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Курс с идентификатором " + courseId + " не найден"));
+
+        if (duration != null) {
+            validateDuration(duration);
+        }
 
         if (title != null) {
             course.setTitle(title);

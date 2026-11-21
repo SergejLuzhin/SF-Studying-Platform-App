@@ -177,5 +177,26 @@
 - `mvn verify`: **121 PASS**, 0 FAIL — PASS
 - `git diff --check`: **PASS**
 
+---
+
+## Выполнено — Пункт 8: Проверка длительности курса
+
+### Изменённые файлы:
+- **`src/main/java/com/studying/platform/service/CourseService.java`** — добавлен приватный метод `validateDuration(Integer duration)` с JavaDoc; вызов в `createCourse` до создания сущности; вызов в `updateCourse` только при `duration != null`; обновлён JavaDoc обоих методов
+
+### Добавленные тесты в `CourseManagementTests.java`:
+- `createCourse_withZeroDuration_shouldThrow` — duration = 0 бросает `IllegalArgumentException`
+- `createCourse_withNegativeDuration_shouldThrow` — duration = -5 бросает `IllegalArgumentException`
+- `createCourse_withMinimumDuration_shouldSucceed` — duration = 1 создаётся успешно
+- `updateCourse_withZeroDuration_shouldThrow` — duration = 0 бросает `IllegalArgumentException`, данные не меняются
+- `updateCourse_withNegativeDuration_shouldThrow` — duration = -10 бросает `IllegalArgumentException`, данные не меняются
+- `updateCourse_withMinimumDurationShouldSucceed` — duration = 1 обновляется успешно
+- `updateCourse_withNullDuration_shouldPreserveValue` — duration = null сохраняет прежнее значение 25
+
+### Результаты:
+- `mvn test -Dtest=CourseManagementTests`: **18 PASS** (11 существующих + 8 новых + databaseIsPostgreSQL) — PASS
+- `mvn verify`: **128 PASS**, 0 FAIL — PASS
+- `git diff --check`: **PASS**
+
 ### Следующий шаг:
-Пункт 8 — проверить продолжительность курса.
+Пункт 9 — согласовать документацию модели и фактическое состояние.
