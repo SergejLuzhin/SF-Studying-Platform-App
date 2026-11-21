@@ -1,39 +1,32 @@
 # Текущее состояние проекта
 
 ## Текущий этап
-Этап 03 — не начат.
+Этап 04 — не начат.
 
 ## Выполненные этапы
 - **Этап 01 (Проектирование модели):** completed. Создан `docs/data-model.md` с описанием 15 JPA-сущностей, связей, каскадов, стратегий загрузки и защиты учебной истории.
-- **Этап 02 (Основа Spring Boot):** completed. Настроен Maven (Spring Boot 3.5.3, Java 23), созданы точка входа, профили `dev`/`test`, настроена конфигурация БД с переменными окружения. Тесты проходят с PostgreSQL через Testcontainers.
+- **Этап 02 (Основа Spring Boot):** completed. Настроен Maven (Spring Boot 3.5.3, Java 23), созданы точка входа, профили `dev`/`test`, настроена конфигурация БД с переменными окружения.
+- **Этап 03 (Инфраструктура интеграционных тестов):** completed. Расширен `StudyingPlatformApplicationTests.java`: 6 тестовых методов проверяют загрузку Spring-контекста с профилем `test`, наличие DataSource и EntityManagerFactory, живое соединение с PostgreSQL через Testcontainers (`SELECT 1`), активный профиль, изоляцию тестовой базы от рабочей и значение `ddl-auto: create-drop`. Docker поднимает PostgreSQL 16.16 автоматически.
 
 ## Блокирующие проблемы
 Нет.
 
-## Затронутые файлы (Этап 02)
-- `pom.xml` — обновлён (Spring Boot 3.5.3 parent, web, jpa, postgresql, h2 (test), testcontainers/jdbc, testcontainers/postgresql, junit-jupiter (test), spring-boot-maven-plugin)
-- `src/main/java/com/studying/platform/StudyingPlatformApplication.java` — создан (точка входа, JavaDoc)
-- `src/main/resources/application.yml` — создан (базовая конфигурация, активный профиль)
-- `src/main/resources/application-dev.yml` — создан (профиль dev, ddl-auto: update, переменные окружения)
-- `src/main/resources/application-test.yml` — создан (профиль test, jdbc:tc: PostgreSQL через Testcontainers)
-- `src/test/java/com/studying/platform/StudyingPlatformApplicationTests.java` — создан (SpringBootTest, JavaDoc)
+## Затронутые файлы (Этап 03)
+- `src/test/java/com/studying/platform/StudyingPlatformApplicationTests.java` — расширен: внедрение `EntityManagerFactory`, `Environment`, добавление 5 новых тестовых методов (всего 6), JavaDoc на русском для каждого метода.
+- `plan.md` — статус Этапа 03 обновлён на `completed`.
 
 ## Ключевые решения
-- Spring Boot 3.5.3 (совместим с Java 23)
-- Профиль `dev` по умолчанию (из `${SPRING_PROFILES_ACTIVE:dev}`)
-- Параметры БД вынесены в переменные окружения (`DB_URL`, `DB_USER`, `DB_PASSWORD`)
-- Тесты используют PostgreSQL через Testcontainers (`jdbc:tc:` URL) — контейнер создаётся автоматически
-- H2 добавлен как резервная зависимость для тестов без Docker
-- ADR не создавались (решения тривиальны для этапа настройки)
+- Тесты используют `@Autowired` в параметрах `@Test`-методов (автовнедрение Spring 6.1+) для `DataSource`, `LocalContainerEntityManagerFactoryBean`, `Environment`.
+- Свойство `ddl-auto` читается через `Environment.getProperty("spring.jpa.hibernate.ddl-auto")`.
+- URL базы проверяется на отсутствие `studying_platform` (Testcontainers трансформирует `jdbc:tc:` URL, поэтому имя `studying_platform_test` не появляется в финальной строке подключения).
+- ADR не создавались (решения тривиальны).
 
-## Проверки (Этап 02)
-- `mvn clean compile`: PASS
-- `mvn clean test`: PASS (1 тест, 0 ошибок, реальная PostgreSQL 16.16 через Testcontainers)
+## Проверки (Этап 03)
+- `mvn clean compile -q`: PASS
+- `mvn test -q`: PASS (Tests run: 6, Failures: 0, Errors: 0, Skipped: 0)
 - `git diff --check`: PASS (нет проблем форматирования)
-- Проверка профилей (dev/test): PASS
-- Переменные окружения для паролей: PASS (dev: `${DB_PASSWORD:postgres}`, test: тестовые креды)
-- Testcontainers PostgreSQL: PASS (контейнер поднимается автоматически)
-- `ddl-auto: update` в dev: PASS (конфигурация верна)
+- Docker/Testcontainers PostgreSQL: PASS (postgres:16.16, Ryuk запущен, HikariPool подключён)
+- Проверка 6.1–6.8 (критерии приёмки): PASS (все 8 подтверждены)
 
 ## Следующее действие
-Начать выполнение Этапа 03 (Инфраструктура интеграционных тестов) из plan.md.
+Начать выполнение Этапа 04 (Пользователи и профили) из plan.md.
