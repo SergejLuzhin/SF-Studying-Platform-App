@@ -75,8 +75,10 @@ public class EnrollmentService {
      * Записывает студента на курс.
      * <p>
      * Проверяет существование пользователя и курса, роль пользователя (должна быть STUDENT),
-     * а также отсутствие активной записи. Если проверка не пройдена —
-     * выбрасывает {@link ResourceNotFoundException} или {@link IllegalStateException}.
+     * а также отсутствие любой записи студента на курс (независимо от статуса).
+     * Согласовано правило: один студент может быть записан на курс только один раз.
+     * Повторная запись запрещена даже после отписки — статус DROPPED не реактивируется.
+     * Если проверка не пройдена — выбрасывает {@link ResourceNotFoundException} или {@link IllegalStateException}.
      * </p>
      *
      * @param studentId идентификатор студента
@@ -84,7 +86,7 @@ public class EnrollmentService {
      * @return сохранённая запись
      * @throws ResourceNotFoundException если студент или курс не найдены,
      *                                   или роль пользователя не STUDENT
-     * @throws IllegalStateException     если студент уже записан на курс
+     * @throws IllegalStateException     если студент уже был записан на курс (ACTIVE или DROPPED)
      */
     public Enrollment enrollStudent(Long studentId, Long courseId) {
         User student = userRepository.findById(studentId)
@@ -100,12 +102,12 @@ public class EnrollmentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Курс с идентификатором " + courseId + " не найден"));
 
-        // Проверка отсутствия активной записи
+        // Проверка отсутствия любой записи (ACTIVE или DROPPED)
         Optional<Enrollment> existing = enrollmentRepository
-                .findByUserIdAndCourseIdAndStatus(studentId, courseId, EnrollmentStatus.ACTIVE);
+                .findByUserIdAndCourseId(studentId, courseId);
         if (existing.isPresent()) {
             throw new IllegalStateException(
-                    "Студент с идентификатором " + studentId + " уже записан на курс с идентификатором " + courseId);
+                    "Студент с идентификатором " + studentId + " уже был записан на курс с идентификатором " + courseId);
         }
 
         Enrollment enrollment = new Enrollment(student, course, LocalDateTime.now(), EnrollmentStatus.ACTIVE);
@@ -201,15 +203,20 @@ public class EnrollmentService {
     }
 
     /**
-     * Возвращает статус записи студента на курс, если запись существует.
+     * Возвращает статус записи студента на курс.
+     * <p>
+     * Метод ищет любую запись по паре студент–курс, независимо от статуса.
+     * Возвращает {@code ACTIVE} для активной записи, {@code DROPPED} после отписки
+     * и {@code null} только если запись полностью отсутствует.
+     * </p>
      *
      * @param studentId идентификатор студента
      * @param courseId  идентификатор курса
-     * @return статус записи или null, если запись не найдена
+     * @return статус записи или {@code null}, если запись не найдена
      */
     public EnrollmentStatus getEnrollmentStatus(Long studentId, Long courseId) {
         return enrollmentRepository
-                .findByUserIdAndCourseIdAndStatus(studentId, courseId, EnrollmentStatus.ACTIVE)
+                .findByUserIdAndCourseId(studentId, courseId)
                 .map(Enrollment::getStatus)
                 .orElse(null);
     }

@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 5 плана исправлений: Исправить списки курсов и студентов вне транзакции** (`completed`)
+**Пункт 6 плана исправлений: Исправить повторную запись и статус после отписки** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -136,3 +136,20 @@
 
 ### Следующий шаг:
 Пункт 6 — исправить повторную запись и статус после отписки.
+
+---
+
+## Выполнено — Пункт 6: Исправить повторную запись и статус после отписки
+
+### Изменённые файлы:
+- **`src/main/java/com/studying/platform/repository/EnrollmentRepository.java`** — добавлен метод `findByUserIdAndCourseId(Long userId, Long courseId)` для поиска любой записи независимо от статуса; обновлён JavaDoc
+- **`src/main/java/com/studying/platform/service/EnrollmentService.java`** — в `enrollStudent`: проверка любой существующей записи (ACTIVE или DROPPED) вместо только ACTIVE; сообщение об ошибке изменено на «уже был записан»; в `getEnrollmentStatus`: поиск без фильтра статуса — возвращает ACTIVE, DROPPED или null; обновлён JavaDoc обоих методов
+- **`src/test/java/com/studying/platform/EnrollmentTests.java`** — обновлён `getEnrollmentStatus_shouldReturnCorrectStatus`: после отписки ожидается `DROPPED` вместо `null`; добавлены 2 новых теста: `enrollStudent_afterDrop_shouldThrow` (запись → отписка → повторная запись бросает `IllegalStateException`, статус остаётся DROPPED) и `uniqueConstraint_userIdCourseId_shouldPreventDuplicate` (обход сервиса, проверка ограничения БД через `PersistenceException`)
+
+### Результаты:
+- `mvn test -Dtest=EnrollmentTests`: **14 PASS** (12 существующих + 2 новых) — PASS
+- `mvn verify`: **117 PASS**, 0 FAIL — PASS
+- `git diff --check`: **PASS**
+
+### Следующий шаг:
+Пункт 7 — доказать каскадное сохранение и повторное чтение.

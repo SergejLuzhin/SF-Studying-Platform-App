@@ -30,6 +30,20 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
     Optional<Enrollment> findByUserIdAndCourseIdAndStatus(Long userId, Long courseId, EnrollmentStatus status);
 
     /**
+     * Находит любую запись студента на курс по идентификаторам пользователя и курса,
+     * независимо от статуса.
+     * <p>
+     * Используется для проверки правила «один студент — одна запись на курс»:
+     * если запись существует (любого статуса), повторная запись запрещена.
+     * </p>
+     *
+     * @param userId   идентификатор пользователя (студента)
+     * @param courseId идентификатор курса
+     * @return обязательное значение с записью, если найдена; пустое значение — если нет
+     */
+    Optional<Enrollment> findByUserIdAndCourseId(Long userId, Long courseId);
+
+    /**
      * Находит все активные записи студента.
      * <p>
      * С помощью {@link EntityGraph} загружает связанные курсы,

@@ -16,6 +16,7 @@ import com.studying.platform.exception.ResourceNotFoundException;
 import jakarta.persistence.EntityManager;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -447,7 +448,7 @@ class EnrollmentTests {
      * Позитивный тест: проверка статуса записи.
      * <p>
      * Записывает студента на курс, проверяет статус ACTIVE,
-     * затем отписывает и проверяет, что статус становится null.
+     * затем отписывает и проверяет, что статус становится DROPPED.
      * </p>
      */
     @Test
@@ -485,9 +486,10 @@ class EnrollmentTests {
         // Отписка
         enrollmentService.dropEnrollment(student.getId(), course.getId());
 
-        // Проверка: после отписки статус null (активная запись больше не существует)
-        assertNull(enrollmentService.getEnrollmentStatus(student.getId(), course.getId()),
-                "После отписки активная запись больше не существует, статус должен быть null");
+        // Проверка: после отписки статус DROPPED (запись существует, но не активна)
+        assertEquals(EnrollmentStatus.DROPPED,
+                enrollmentService.getEnrollmentStatus(student.getId(), course.getId()),
+                "После отписки статус должен быть DROPPED, так как запись существует");
     }
 
     /**
@@ -521,6 +523,99 @@ class EnrollmentTests {
         assertThrows(ResourceNotFoundException.class, () -> {
             enrollmentService.enrollStudent(admin.getId(), course.getId());
         }, "Администратор не должен иметь возможность записаться на курс");
+    }
+
+    /**
+     * Негативный тест: повторная запись студента после отписки.
+     * <p>
+     * Записывает студента на курс, отписывает его, затем проверяет, что повторная
+     * запись отклоняется с {@link IllegalStateException}, а исходная запись
+     * и её статус не изменены.
+     * </p>
+     */
+    @Test
+    void enrollStudent_afterDrop_shouldThrow() {
+        // Подготовка
+        User teacher = new User("afterdropteacher@example.com", UserRole.TEACHER);
+        entityManager.persist(teacher);
+        entityManager.flush();
+
+        Category category = new Category("Музыка");
+        entityManager.persist(category);
+        entityManager.flush();
+
+        Course course = new Course("Музыкальная теория", "Основы музыкальной теории", 25,
+                LocalDate.of(2026, 9, 1), teacher, category);
+        entityManager.persist(course);
+        entityManager.flush();
+
+        User student = new User("afterdropstudent@example.com", UserRole.STUDENT);
+        entityManager.persist(student);
+        entityManager.flush();
+
+        // Первоначальная запись
+        Enrollment initialEnrollment = enrollmentService.enrollStudent(student.getId(), course.getId());
+        Long enrollmentId = initialEnrollment.getId();
+        assertEquals(EnrollmentStatus.ACTIVE, initialEnrollment.getStatus());
+
+        // Отписка
+        enrollmentService.dropEnrollment(student.getId(), course.getId());
+
+        // Проверка статуса после отписки
+        assertEquals(EnrollmentStatus.DROPPED,
+                enrollmentService.getEnrollmentStatus(student.getId(), course.getId()),
+                "Статус после отписки должен быть DROPPED");
+
+        // Повторная запись должна быть отклонена
+        assertThrows(IllegalStateException.class, () -> {
+            enrollmentService.enrollStudent(student.getId(), course.getId());
+        }, "Повторная запись после отписки должна вызвать IllegalStateException");
+
+        // Проверка: исходная запись и статус не изменены
+        Enrollment persisted = enrollmentRepository.findById(enrollmentId).orElseThrow();
+        assertEquals(EnrollmentStatus.DROPPED, persisted.getStatus(),
+                "Статус исходной записи должен остаться DROPPED");
+    }
+
+    /**
+     * Негативный тест: проверка ограничения уникальности БД на уровне репозитория.
+     * <p>
+     * Обходит сервис и напрямую пытается создать две записи с одинаковой
+     * парой (user_id, course_id). Ожидается, что второе сохранение выбросит
+     * исключение о нарушении ограничения уникальности.
+     * </p>
+     */
+    @Test
+    void uniqueConstraint_userIdCourseId_shouldPreventDuplicate() {
+        // Подготовка
+        User teacher = new User("constraintteacher@example.com", UserRole.TEACHER);
+        entityManager.persist(teacher);
+        entityManager.flush();
+
+        Category category = new Category("Философия");
+        entityManager.persist(category);
+        entityManager.flush();
+
+        Course course = new Course("Этика", "Основы этики", 20,
+                LocalDate.of(2026, 9, 1), teacher, category);
+        entityManager.persist(course);
+        entityManager.flush();
+
+        User student = new User("constraintstudent@example.com", UserRole.STUDENT);
+        entityManager.persist(student);
+        entityManager.flush();
+
+        // Сохраняем первую запись вручную
+        Enrollment first = new Enrollment(student, course, LocalDateTime.now(), EnrollmentStatus.ACTIVE);
+        entityManager.persist(first);
+        entityManager.flush();
+
+        // Вторая попытка должна нарушить ограничение
+        assertThrows(jakarta.persistence.PersistenceException.class, () -> {
+            Enrollment second = new Enrollment(student, course, LocalDateTime.now(), EnrollmentStatus.ACTIVE);
+            entityManager.persist(second);
+            entityManager.flush();
+        }, "Двойная запись с одной парой user_id/course_id должна нарушить ограничение БД");
     }
 
     /**
