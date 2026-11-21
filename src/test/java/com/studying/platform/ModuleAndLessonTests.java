@@ -15,7 +15,11 @@ import jakarta.persistence.EntityManager;
 import org.hibernate.PropertyValueException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.test.context.ActiveProfiles;
+
+import javax.sql.DataSource;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,8 +33,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * чтение структуры «курс → модули → уроки», негативные сценарии
  * и специализированные методы репозиториев.
  * </p>
+ * <p>
+ * Тесты выполняются с PostgreSQL через Testcontainers в профиле «test».
+ * </p>
  */
 @DataJpaTest
+@ActiveProfiles("test")
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ModuleAndLessonTests {
 
     /**
@@ -68,6 +77,12 @@ class ModuleAndLessonTests {
      */
     @Autowired
     private CategoryRepository categoryRepository;
+
+    /**
+     * Источник данных для проверки продукта базы данных.
+     */
+    @Autowired
+    private DataSource dataSource;
 
     /**
      * Создаёт и сохраняет тестовую категорию.
@@ -703,5 +718,21 @@ class ModuleAndLessonTests {
 
         List<Lesson> lessons = lessonRepository.findByModuleId(module.getId());
         assertTrue(lessons.isEmpty(), "Список уроков должен быть пустым");
+    }
+
+    /**
+     * Проверка, что в тестах используется PostgreSQL через Testcontainers.
+     * <p>
+     * Гарантирует, что {@code @DataJpaTest} с {@code @AutoConfigureTestDatabase(replace = NONE)}
+     * использует контейнерную PostgreSQL, а не встроенную H2-базу.
+     * </p>
+     */
+    @Test
+    void databaseIsPostgreSQL() throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            String productName = connection.getMetaData().getDatabaseProductName();
+            assertEquals("PostgreSQL", productName,
+                    "Тестовая база должна быть PostgreSQL, получено: " + productName);
+        }
     }
 }

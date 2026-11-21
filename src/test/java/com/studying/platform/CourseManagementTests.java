@@ -17,7 +17,11 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.test.context.ActiveProfiles;
+
+import javax.sql.DataSource;
 
 import java.time.LocalDate;
 
@@ -30,8 +34,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * а также добавление модулей и уроков через сервисный слой.
  * Включают позитивные и негативные сценарии с проверкой бизнес-правил.
  * </p>
+ * <p>
+ * Тесты выполняются с PostgreSQL через Testcontainers в профиле «test».
+ * </p>
  */
 @DataJpaTest
+@ActiveProfiles("test")
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class CourseManagementTests {
 
     /**
@@ -69,6 +78,12 @@ class CourseManagementTests {
      */
     @Autowired
     private CategoryRepository categoryRepository;
+
+    /**
+     * Источник данных для проверки продукта базы данных.
+     */
+    @Autowired
+    private DataSource dataSource;
 
     /**
      * Сервис управления курсами. Создаётся вручную для обхода проблем
@@ -449,5 +464,21 @@ class CourseManagementTests {
         );
         assertTrue(exception.getMessage().contains("не найден"),
                 "Сообщение исключения должно содержать информацию об отсутствии курса");
+    }
+
+    /**
+     * Проверка, что в тестах используется PostgreSQL через Testcontainers.
+     * <p>
+     * Гарантирует, что {@code @DataJpaTest} с {@code @AutoConfigureTestDatabase(replace = NONE)}
+     * использует контейнерную PostgreSQL, а не встроенную H2-базу.
+     * </p>
+     */
+    @Test
+    void databaseIsPostgreSQL() throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            String productName = connection.getMetaData().getDatabaseProductName();
+            assertEquals("PostgreSQL", productName,
+                    "Тестовая база должна быть PostgreSQL, получено: " + productName);
+        }
     }
 }

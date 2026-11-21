@@ -151,4 +151,26 @@ class StudyingPlatformApplicationTests {
         assertEquals("create-drop", ddlAuto,
                 "ddl-auto в профиле «test» должен быть «create-drop», получено: " + ddlAuto);
     }
+
+    /**
+     * Проверка, что в тестах используется PostgreSQL через Testcontainers.
+     * <p>
+     * Читает мета-данные JDBC-соединения и убеждается,
+     * что продукт базы данных — именно PostgreSQL, а не H2 или другая встроенная база.
+     * Это гарантирует, что интеграционные тесты работают с реальной PostgreSQL,
+     * а не подменяются встроенной базой.
+     * </p>
+     *
+     * @param dataSource автоматически настроенный Spring DataSource;
+     *                   через него извлекается мета-данные JDBC-соединения
+     * @throws Exception если возникла ошибка при получении мета-данных соединения
+     */
+    @Test
+    void databaseIsPostgreSQL(@Autowired DataSource dataSource) throws Exception {
+        try (Connection connection = dataSource.getConnection()) {
+            String productName = connection.getMetaData().getDatabaseProductName();
+            assertEquals("PostgreSQL", productName,
+                    "Тестовая база должна быть PostgreSQL, получено: " + productName);
+        }
+    }
 }

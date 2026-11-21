@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Этап 09. Задания** (`pending`)
+**Пункт 1 плана исправлений: Сделать PostgreSQL стандартной базой интеграционных тестов** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -35,4 +35,30 @@
 - `stage-tester`: STATUS: PASS
 
 ### Следующий шаг:
-Этап 09 — реализовать `Assignment`, репозиторий и управление заданиями урока.
+Пункт 1 плана исправлений — перевод интеграционных тестов на PostgreSQL через Testcontainers.
+
+---
+
+## Выполнено — Пункт 1: PostgreSQL для всех интеграционных тестов
+
+### Изменённые файлы:
+- `pom.xml` — удалена зависимость `com.h2database:h2`
+- `src/test/java/com/studying/platform/CategoryAndCourseTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
+- `src/test/java/com/studying/platform/UserAndProfileTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
+- `src/test/java/com/studying/platform/ModuleAndLessonTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
+- `src/test/java/com/studying/platform/CourseManagementTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
+- `src/test/java/com/studying/platform/EnrollmentTests.java` — добавлены `@ActiveProfiles("test")`, `@AutoConfigureTestDatabase(replace = NONE)`, проверка `databaseIsPostgreSQL()`
+- `src/test/java/com/studying/platform/StudyingPlatformApplicationTests.java` — добавлена проверка `databaseIsPostgreSQL()`
+
+### Результаты проверок:
+- `mvn test -Dtest=StudyingPlatformApplicationTests,UserAndProfileTests`: 19 PASS, 0 FAIL — PASS
+- `mvn verify`: 75 PASS, 0 FAIL, 0 ERROR — PASS
+  - CategoryAndCourseTests: 16 PASS (+1 проверка PostgreSQL)
+  - UserAndProfileTests: 12 PASS (+1 проверка PostgreSQL)
+  - ModuleAndLessonTests: 17 PASS (+1 проверка PostgreSQL)
+  - CourseManagementTests: 11 PASS (+1 проверка PostgreSQL)
+  - EnrollmentTests: 12 PASS (+1 проверка PostgreSQL)
+  - StudyingPlatformApplicationTests: 7 PASS (+1 проверка PostgreSQL)
+
+### Следующий шаг:
+Пункт 2 — проверить реальное создание схемы.

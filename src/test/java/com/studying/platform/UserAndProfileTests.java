@@ -10,7 +10,11 @@ import org.hibernate.PropertyValueException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.test.context.ActiveProfiles;
+
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,11 +26,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * корректность связи «один-к-одному».
  * </p>
  * <p>
- * Тесты выполняются с встроенной H2-базой через {@code @DataJpaTest}.
+ * Тесты выполняются с PostgreSQL через Testcontainers в профиле «test».
  * Исключения проверяются на уровне Hibernate (без Spring-обёртки).
  * </p>
  */
 @DataJpaTest
+@ActiveProfiles("test")
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class UserAndProfileTests {
 
     /**
@@ -46,6 +52,12 @@ class UserAndProfileTests {
      */
     @Autowired
     private ProfileRepository profileRepository;
+
+    /**
+     * Источник данных для проверки продукта базы данных.
+     */
+    @Autowired
+    private DataSource dataSource;
 
     /**
      * Проверка: сохранение пользователя и профиля с проверкой связи.
@@ -311,5 +323,21 @@ class UserAndProfileTests {
         var found = profileRepository.findByUserId(user.getId());
         assertTrue(found.isPresent(), "Профиль по ID пользователя должен быть найден");
         assertEquals("Поиск по ID", found.get().getDisplayName());
+    }
+
+    /**
+     * Проверка, что в тестах используется PostgreSQL через Testcontainers.
+     * <p>
+     * Гарантирует, что {@code @DataJpaTest} с {@code @AutoConfigureTestDatabase(replace = NONE)}
+     * использует контейнерную PostgreSQL, а не встроенную H2-базу.
+     * </p>
+     */
+    @Test
+    void databaseIsPostgreSQL() throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            String productName = connection.getMetaData().getDatabaseProductName();
+            assertEquals("PostgreSQL", productName,
+                    "Тестовая база должна быть PostgreSQL, получено: " + productName);
+        }
     }
 }
