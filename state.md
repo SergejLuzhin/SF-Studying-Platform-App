@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 1 плана исправлений: Сделать PostgreSQL стандартной базой интеграционных тестов** (`completed`)
+**Пункт 2 плана исправлений: Проверить реальное создание схемы** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -53,12 +53,29 @@
 ### Результаты проверок:
 - `mvn test -Dtest=StudyingPlatformApplicationTests,UserAndProfileTests`: 19 PASS, 0 FAIL — PASS
 - `mvn verify`: 75 PASS, 0 FAIL, 0 ERROR — PASS
-  - CategoryAndCourseTests: 16 PASS (+1 проверка PostgreSQL)
-  - UserAndProfileTests: 12 PASS (+1 проверка PostgreSQL)
-  - ModuleAndLessonTests: 17 PASS (+1 проверка PostgreSQL)
-  - CourseManagementTests: 11 PASS (+1 проверка PostgreSQL)
-  - EnrollmentTests: 12 PASS (+1 проверка PostgreSQL)
-  - StudyingPlatformApplicationTests: 7 PASS (+1 проверка PostgreSQL)
 
 ### Следующий шаг:
 Пункт 2 — проверить реальное создание схемы.
+
+---
+
+## Выполнено — Пункт 2: Проверка схемы и ограничений
+
+### Созданный файл:
+- `src/test/java/com/studying/platform/PostgresSchemaTests.java` — новый тестовый класс с 9 проверками схемы
+
+### Проверяемые элементы:
+- **Соединение**: `SELECT 1`, активный профиль `test`, продукт БД — PostgreSQL
+- **Таблицы**: users, profiles, categories, courses, modules, lessons, enrollments, tags, course_reviews, course_tag
+- **Первичные ключи**: одиночный `id` для 9 таблиц; составной `(course_id, tag_id)` для course_tag
+- **Внешние ключи**: 11 FK (profiles→users, courses→users, courses→categories, modules→courses, lessons→modules, enrollments→users, enrollments→courses, course_reviews→courses, course_reviews→users, course_tag→courses, course_tag→tags)
+- **Уникальные ограничения**: users.login, profiles.user_id, enrollments(user_id+course_id), tags.name
+- **Конфигурация**: `ddl-auto=create-drop` в тесте, изоляция тестовой БД от рабочей
+
+### Результаты проверок:
+- `mvn test -Dtest=PostgresSchemaTests`: 9 PASS, 0 FAIL — PASS
+- `mvn verify`: 84 PASS, 0 FAIL, 0 ERROR — PASS
+- `git diff --check`: PASS
+
+### Следующий шаг:
+Пункт 3 — привести пользователя к согласованной модели (удалить пароль, добавить email).
