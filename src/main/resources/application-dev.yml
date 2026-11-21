@@ -1,0 +1,23 @@
+# Профиль «dev» — локальная разработка
+#
+# Используется при запуске без явного указания профиля.
+# Подключение к локальной PostgreSQL (localhost:5432).
+# Схема обновляется автоматически при запуске приложения.
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/studying_platform}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true

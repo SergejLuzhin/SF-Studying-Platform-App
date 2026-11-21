@@ -1,0 +1,23 @@
+# Профиль «test» — тестирование
+#
+# Используется при запуске mvn test.
+# Подключается к PostgreSQL через Testcontainers (URL jdbc:tc:).
+# Контейнер поднимается автоматически при первом подключении.
+
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    url: jdbc:tc:postgresql:16:///studying_platform_test
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
