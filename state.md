@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 3 плана исправлений: Привести пользователя к согласованной модели** (`completed`)
+**Пункт 4 плана исправлений: Добавить создание пользователя через сервис** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -84,3 +84,26 @@
 
 ### Следующий шаг:
 Пункт 4 — добавить `UserService` с конструкторным внедрением и транзакционным методом `createUser`.
+
+---
+
+## Выполнено — Пункт 4: Добавить создание пользователя через сервис
+
+### Созданные файлы:
+- **`src/main/java/com/studying/platform/service/UserService.java`** — сервисный слой с методами:
+  - `createUser(email, role)` — создание пользователя с валидацией через Jakarta Bean Validation, проверкой дубликата email и сохранением через `saveAndFlush`
+  - `getUser(userId)` — чтение пользователя по ID с выбросом `ResourceNotFoundException` при отсутствии
+- **`src/test/java/com/studying/platform/UserServiceTests.java`** — 15 интеграционных тестов через `@SpringBootTest`:
+  - Позитивные: создание STUDENT, создание TEACHER, чтение существующего, чтение вне транзакции, email макс. длины (50 символов)
+  - Валидация: null email, пустой email, пробельный email, некорректный формат, email > 50 символов, null role — все бросают `ConstraintViolationException`
+  - Дубликат: повторный email бросает `IllegalStateException`
+  - Отсутствие: `getUser(99999L)` бросает `ResourceNotFoundException`
+  - Интеграция: преподаватель из UserService используется для создания курса, студент из UserService записывается через EnrollmentService
+
+### Результаты:
+- `mvn test -Dtest=UserServiceTests`: **15 PASS** — PASS
+- `mvn verify`: **107 PASS**, 0 FAIL — PASS
+- `git diff --check`: **PASS**
+
+### Следующий шаг:
+Пункт 5 — исправить списки курсов и студентов вне транзакции.
