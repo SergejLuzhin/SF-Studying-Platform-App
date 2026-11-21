@@ -23,7 +23,7 @@
 **Enum `UserRole`:** `STUDENT`, `TEACHER`, `ADMIN`.
 
 **Связи:**
-- `1:1` с `Profile` (владелец — `Profile`, LAZY, `mappedBy = "user"`)
+- `1:1` с `Profile` (владелец — `Profile`; обратная связь `User.profile` без явного `fetch = LAZY`; конкретная стратегия загрузки определяется настройками `Profile.user`)
 - `1:M` с `Course` (через `Course.teacher`, владелец — `Course`, LAZY)
 - `1:M` с `Enrollment` (владелец — `Enrollment`, LAZY)
 - `1:M` с `Submission` (владелец — `Submission`, LAZY, **не реализовано**)
@@ -40,13 +40,13 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `displayName` | `String` | `VARCHAR(100)` | `@Column(nullable = false)` |
-| `bio` | `String` | `TEXT` | `@Lob`, `@Column(columnDefinition = "TEXT")` |
+| `bio` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `avatarUrl` | `String` | `VARCHAR(500)` | `@Column(length = 500)` |
 | `user` | `User` | — | `@OneToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "user_id", unique = true, nullable = false, foreignKey = @ForeignKey(name = "fk_profile_user"))` |
 
 **Примечание:** Владелец связи «один-к-одному» — `Profile`. Обратная сторона — `User.profile` с `mappedBy = "user"`. Профиль **не обязателен** для пользователя (связь необязательная).
 
-**Каскады:** `CascadeType.PERSIST`, `CascadeType.MERGE`.
+**Каскады:** нет.
 
 ---
 
@@ -284,7 +284,7 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `rating` | `Integer` | `INTEGER` | `@Column(nullable = false)`, диапазон 1–5 |
-| `comment` | `String` | `TEXT` | `@Lob` |
+| `comment` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `createdAt` | `LocalDateTime` | `TIMESTAMP` | `@Column(nullable = false)` |
 | `courseId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_review_course"))` |
 | `studentId` | `Long` | `BIGINT` | `@ManyToOne(fetch = FetchType.LAZY)`, `@JoinColumn(name = "student_id", nullable = false, foreignKey = @ForeignKey(name = "fk_review_student"))` |
@@ -361,7 +361,7 @@ QUIZ ─────1:M──▶ QUIZSUBMISSION
 | Lesson | → Assignment | PERSIST, MERGE | true |
 | Quiz | → Question | PERSIST, MERGE | true |
 | Question | → AnswerOption | PERSIST, MERGE | true |
-| Profile | → User (через FK) | PERSIST, MERGE | false |
+| Profile | → User (через FK) | нет | false |
 
 ### 4.2. Правила удаления (History Protection)
 
@@ -602,7 +602,7 @@ MULTIPLE_CHOICE — один или несколько правильных от
 
 ## 8. Примечания по реализации
 
-1. **Ленивая загрузка:** все коллекции (`@OneToMany`, `@ManyToMany`) используют `FetchType.LAZY`. Связи `@ManyToOne` реализованных сущностей также явно заданы как `LAZY` (кроме `Course.category`, которая загружается `EAGER` как небольшая справочная сущность). `@OneToOne` с стороны `Profile` также `LAZY`.
+1. **Ленивая загрузка:** все коллекции (`@OneToMany`, `@ManyToMany`) используют `FetchType.LAZY`. Связи `@ManyToOne` реализованных сущностей также явно заданы как `LAZY` (кроме `Course.category`, которая загружается `EAGER` как небольшая справочная сущность). `@OneToOne` со стороны `Profile` также `LAZY`. Обратная связь `User.profile` не задаёт `fetch = LAZY` явно; стратегия загрузки определяется настройками `Profile.user`.
 
 2. **Генерация ID:** все сущности используют `@GeneratedValue(strategy = GenerationType.IDENTITY)` с PostgreSQL sequences.
 
@@ -611,3 +611,7 @@ MULTIPLE_CHOICE — один или несколько правильных от
 4. **Инициализация схемы:** `spring.jpa.hibernate.ddl-auto = update` для автоматического создания/обновления схемы на основе аннотаций.
 
 5. **Валидация диапазонов:** для `rating` (1-5) и `maxScore` (положительное) рекомендуется валидация на уровне сервиса (не на уровне JPA).
+
+6. **Хранение текстовых полей:** для реализованных сущностей (`Course.description`, `Module.description`, `Lesson.content`, `Profile.bio`, `CourseReview.comment`) текстовые поля маппятся как `TEXT` без `@Lob` — это предотвращает запись OID Large Object вместо текста. Старые данные, созданные с маппингом `@Lob` + `columnDefinition = "TEXT"`, могут содержать OID Large Object в колонках; требуется отдельная согласованная миграция.
+
+7. **Совместимость старой базы:** физическое имя колонки пользователя — `users.login` (хранит email), а также в старой схеме может сохраниться колонка `users.password NOT NULL` (удалённая из модели). `ddl-auto=update` не удалит эту колонку автоматически. Вставка нового пользователя без пароля в старую схему завершится ошибкой. Для использования старой рабочей базы требуется согласованная миграция.
