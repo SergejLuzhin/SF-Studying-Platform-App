@@ -1,5 +1,6 @@
 package com.studying.platform.entity;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -88,9 +89,9 @@ public class Course {
      * Владелец обратной связи — сущность {@link Module}.
      */
     @OneToMany(mappedBy = "course", fetch = FetchType.LAZY,
-            cascade = {jakarta.persistence.CascadeType.PERSIST,
-                    jakarta.persistence.CascadeType.MERGE,
-                    jakarta.persistence.CascadeType.REMOVE},
+            cascade = {CascadeType.PERSIST,
+                    CascadeType.MERGE,
+                    CascadeType.REMOVE},
             orphanRemoval = true)
     private Set<Module> modules = new HashSet<>();
 
@@ -113,8 +114,8 @@ public class Course {
      * Связь реализуется через вспомогательную таблицу {@code course_tag}.
      */
     @ManyToMany(fetch = FetchType.LAZY,
-            cascade = {jakarta.persistence.CascadeType.PERSIST,
-                    jakarta.persistence.CascadeType.MERGE})
+            cascade = {CascadeType.PERSIST,
+                    CascadeType.MERGE})
     @JoinTable(name = "course_tag",
             joinColumns = @JoinColumn(name = "course_id"),
             inverseJoinColumns = @JoinColumn(name = "tag_id"))
