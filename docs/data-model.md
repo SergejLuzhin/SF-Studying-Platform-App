@@ -172,7 +172,7 @@
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
 | `title` | `String` | `VARCHAR(200)` | `@Column(nullable = false)` |
-| `description` | `String` | `TEXT` | `@Lob` |
+| `description` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `dueDate` | `LocalDateTime` | `TIMESTAMP` | `@Column(nullable = false)` |
 | `maxScore` | `Integer` | `INTEGER` | `@Column(nullable = false)` |
 | `lessonId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "lesson_id", nullable = false, foreignKey = @ForeignKey(name = "fk_assignment_lesson"))` |
@@ -190,9 +190,9 @@
 | Поле | Тип Java | Тип PostgreSQL | Аннотации / Ограничения |
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
-| `content` | `String` | `TEXT` | `@Lob`, `nullable = false` |
+| `content` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT", nullable = false)` |
 | `score` | `Integer` | `INTEGER` | |
-| `feedback` | `String` | `TEXT` | `@Lob` |
+| `feedback` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT")` |
 | `submittedAt` | `LocalDateTime` | `TIMESTAMP` | `@Column(nullable = false)` |
 | `assignmentId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "assignment_id", nullable = false)` |
 | `studentId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "student_id", nullable = false)` |
@@ -230,7 +230,7 @@
 | Поле | Тип Java | Тип PostgreSQL | Аннотации / Ограничения |
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
-| `text` | `String` | `TEXT` | `@Lob`, `nullable = false` |
+| `text` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT", nullable = false)` |
 | `type` | `QuestionType` | `VARCHAR(20)` | `@Enumerated(EnumType.STRING)`, `nullable = false` |
 | `quizId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "quiz_id", nullable = false, foreignKey = @ForeignKey(name = "fk_question_quiz"))` |
 
@@ -249,7 +249,7 @@
 | Поле | Тип Java | Тип PostgreSQL | Аннотации / Ограничения |
 |---|---|---|---|
 | `id` | `Long` | `BIGSERIAL` | `@Id`, `@GeneratedValue` |
-| `text` | `String` | `TEXT` | `@Lob`, `nullable = false` |
+| `text` | `String` | `TEXT` | `@Column(columnDefinition = "TEXT", nullable = false)` |
 | `isCorrect` | `Boolean` | `BOOLEAN` | `@Column(nullable = false)` |
 | `questionId` | `Long` | `BIGINT` | `@ManyToOne`, `@JoinColumn(name = "question_id", nullable = false, foreignKey = @ForeignKey(name = "fk_answeroption_question"))` |
 
@@ -612,6 +612,6 @@ MULTIPLE_CHOICE — один или несколько правильных от
 
 5. **Валидация диапазонов:** для `rating` (1-5) и `maxScore` (положительное) рекомендуется валидация на уровне сервиса (не на уровне JPA).
 
-6. **Хранение текстовых полей:** для реализованных сущностей (`Course.description`, `Module.description`, `Lesson.content`, `Profile.bio`, `CourseReview.comment`) текстовые поля маппятся как `TEXT` без `@Lob` — это обеспечивает хранение исходного текста в колонках.
+6. **Хранение текстовых полей:** строковые поля PostgreSQL `TEXT` маппятся без `@Lob` — это обеспечивает хранение исходного текста в колонках. Это правило применяется как к реализованным, так и к будущим сущностям; новые поля проверяются через JPA и прямой SQL.
 
 7. **Рабочая база:** для приложения используется `studying_platform_v2`; для тестов — отдельная база `platform_test` или PostgreSQL через Testcontainers.
