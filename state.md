@@ -33,6 +33,40 @@
 
 ---
 
+## Выполнено — Пункт 13: Исправление хранения текстовых полей PostgreSQL (`completed`)
+
+### Изменённые файлы (сущности — удаление `@Lob`):
+- **`src/main/java/com/studying/platform/entity/Course.java`** — удалён `@Lob` с поля `description`, удалён импорт `jakarta.persistence.Lob`
+- **`src/main/java/com/studying/platform/entity/Module.java`** — удалён `@Lob` с поля `description`, удалён импорт
+- **`src/main/java/com/studying/platform/entity/Lesson.java`** — удалён `@Lob` с поля `content`, удалён импорт
+- **`src/main/java/com/studying/platform/entity/Profile.java`** — удалён `@Lob` с поля `bio`, удалён импорт
+- **`src/main/java/com/studying/platform/entity/CourseReview.java`** — удалён `@Lob` с поля `comment`, удалён импорт
+
+Во всех случаях сохранён `@Column(columnDefinition = "TEXT")` и nullable-семантика.
+
+### Созданный файл:
+- **`src/main/java/com/studying/platform/repository/CourseReviewRepository.java`** — `JpaRepository<CourseReview, Long>` для поддержки тестов
+
+### Созданный тест:
+- **`src/test/java/com/studying/platform/PostgresTextStorageTests.java`** — 3 интеграционных теста:
+  - `textFieldsPersistAndReadCorrectly` — сохраняет 5 текстовых полей с кириллицей, переводом строки и > 255 символов; flush/clear; читает через JPA и SQL — все совпадают
+  - `textFieldsUpdateAndReread` — обновление описания курса; подтверждение через JPA и SQL
+  - `nullAndEmptyTextFields` — null и пустая строка для всех 5 полей; проверка через JPA и SQL
+
+### Результаты проверок:
+- `mvn test -Dtest=PostgresTextStorageTests`: **3 PASS** — PASS
+- `mvn verify`: **147 PASS**, 0 FAIL, 0 ERROR — PASS
+- `git diff --check`: **PASS**
+
+### Блокер существующей базы:
+Данные, созданные со старым маппингом `@Lob` + `columnDefinition = "TEXT"`, могут содержать OID Large Object в TEXT-колонках. Простое удаление `@Lob` или `ddl-auto=update` не преобразует существующие данные. Требуется согласованная миграция: различение OID от обычного текста, резервное копирование, преобразование и проверка целостности.
+
+---
+
+## Выполнено — Пункт 13: Исправление хранения текстовых полей PostgreSQL (`completed`)
+
+---
+
 ## Выполнено — Пункт 12: Точные проверки первичных, внешних и уникальных ключей
 
 ### Изменённый файл:
