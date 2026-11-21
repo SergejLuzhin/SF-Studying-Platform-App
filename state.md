@@ -1,7 +1,7 @@
 # Checkpoint
 
 ## Текущий этап
-**Пункт 6 плана исправлений: Исправить повторную запись и статус после отписки** (`completed`)
+**Пункт 7 плана исправлений: Доказать каскадное сохранение и повторное чтение** (`completed`)
 
 ## Завершённый этап — Этап 08: Запись на курс (`completed`)
 
@@ -153,3 +153,29 @@
 
 ### Следующий шаг:
 Пункт 7 — доказать каскадное сохранение и повторное чтение.
+
+---
+
+## Выполнено — Пункт 7: Доказать каскадное сохранение и повторное чтение
+
+### Изменённые файлы:
+- **`src/test/java/com/studying/platform/ModuleAndLessonTests.java`** — полностью переписаны:
+  - `testCascadeSaveCourseWithModulesAndLessons`: сохраняются общие категория и преподаватель, создаётся курс с 2 модулями и 3 уроками, заполняются двусторонние связи, вызывается `persist(course)` **один раз**, после `flush` и `clear` контекста загружаются курс, модули и уроки заново — проверяются количество, поля, внешние ключи
+  - `testCascadeDeleteCourseRemovesModulesAndLessons`: запоминаются ID курса, 2 модулей, 2 уроков, преподавателя и категории; после удаления проверяется отсутствие курса/модулей/уроков и **сохранение** общих объектов
+- **`src/test/java/com/studying/platform/CategoryAndCourseTests.java`** — добавлен `clear()` после сохранения и перед чтением в `saveCategoryAndCourse_shouldPersistAndRetrieve` и `updateCourse_shouldChangeData`
+- **`src/test/java/com/studying/platform/UserAndProfileTests.java`** — добавлен `clear()` перед чтением профиля и пользователя в `saveUserWithProfile_shouldPersistAndRetrieve`
+
+### Созданный файл:
+- **`src/test/java/com/studying/platform/CourseServiceTransactionTests.java`** — 4 интеграционных теста через `@SpringBootTest` с `@Transactional(propagation = NOT_SUPPORTED)`:
+  - `getCourseStructure_fieldsAccessibleOutsideTransaction` — создание данных через `TransactionTemplate`, вызов `getCourseStructure`, проверка `TransactionSynchronizationManager.isActualTransactionActive() == false`, чтение скалярных полей
+  - `getCourseStructure_multipleModulesAndLessons` — курс с 2 модулями и 3 уроками, проверка общего количества
+  - `getCourseStructure_nonExistentCourse_shouldThrow` — `ResourceNotFoundException`
+  - `getCourseStructure_emptyStructure` — пустая структура без модулей
+
+### Результаты:
+- `mvn test -Dtest=ModuleAndLessonTests,CategoryAndCourseTests,UserAndProfileTests,CourseServiceTransactionTests`: **57 PASS** — PASS
+- `mvn verify`: **121 PASS**, 0 FAIL — PASS
+- `git diff --check`: **PASS**
+
+### Следующий шаг:
+Пункт 8 — проверить продолжительность курса.

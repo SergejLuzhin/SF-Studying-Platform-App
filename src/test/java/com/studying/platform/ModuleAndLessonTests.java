@@ -178,139 +178,148 @@ class ModuleAndLessonTests {
 
     /**
      * Тест: каскадное сохранение курса с модулями и уроками.
-     * При сохранении курса все вложенные модули и уроки должны быть сохранены.
+     * <p>
+     * Сохраняет категорию и преподавателя как общие объекты, создаёт новый курс
+     * с двумя модулями и тремя уроками, заполняет двусторонние связи.
+     * Вызывает {@code persist(course)} один раз — каскады PERSIST на Module
+     * и Lesson обеспечивают запись всех дочерних объектов.
+     * После {@code flush} и {@code clear} контекста загружает курс заново
+     * и проверяет количество, поля и внешние ключи.
+     * </p>
      */
     @Test
     void testCascadeSaveCourseWithModulesAndLessons() {
+        // Сохраняем общие объекты (категория и преподаватель)
         Category category = createCategory("Дизайн");
         User teacher = createTeacher("teacher_cascade@example.com");
+
+        // Строим новый курс с модулями и уроками
         Course course = new Course("UI/UX Дизайн", "Курс по дизайну", 20,
                 LocalDate.of(2026, 10, 15), teacher, category);
+
+        Module module1 = new Module("Основы дизайна", "Основные понятия", 1, course);
+        course.getModules().add(module1);
+
+        Module module2 = new Module("Прототипирование", "Инструменты", 2, course);
+        course.getModules().add(module2);
+
+        Lesson lesson1 = new Lesson("Принципы дизайна", "Контраст, выравнивание", null, module1);
+        module1.getLessons().add(lesson1);
+
+        Lesson lesson2 = new Lesson("Цветовая палитра", "Теория цвета", null, module1);
+        module1.getLessons().add(lesson2);
+
+        Lesson lesson3 = new Lesson("Инструменты", "Figma, Sketch", "https://example.com/prototype", module2);
+        module2.getLessons().add(lesson3);
+
+        // Сохраняем только курс — каскады сохранят модули и уроки
         entityManager.persist(course);
         entityManager.flush();
 
-        Module module1 = new Module();
-        module1.setTitle("Основы дизайна");
-        module1.setOrderIndex(1);
-        module1.setCourse(course);
-        course.getModules().add(module1);
-
-        Module module2 = new Module();
-        module2.setTitle("Прототипирование");
-        module2.setOrderIndex(2);
-        module2.setCourse(course);
-        course.getModules().add(module2);
-
-        Lesson lesson1 = new Lesson();
-        lesson1.setTitle("Принципы дизайна");
-        lesson1.setContent("Контраст, выравнивание, повторяемость");
-        lesson1.setModule(module1);
-        module1.getLessons().add(lesson1);
-
-        Lesson lesson2 = new Lesson();
-        lesson2.setTitle("Цветовая палитра");
-        lesson2.setContent("Теория цвета");
-        lesson2.setModule(module1);
-        module1.getLessons().add(lesson2);
-
-        Lesson lesson3 = new Lesson();
-        lesson3.setTitle("Инструменты прототипирования");
-        lesson3.setVideoUrl("https://example.com/prototype");
-        lesson3.setModule(module2);
-        module2.getLessons().add(lesson3);
-
-        entityManager.persist(module1);
-        entityManager.persist(module2);
-        entityManager.persist(lesson1);
-        entityManager.persist(lesson2);
-        entityManager.persist(lesson3);
-        entityManager.merge(course);
-        entityManager.flush();
-
+        // Запоминаем ID
         Long courseId = course.getId();
         Long module1Id = module1.getId();
+        Long module2Id = module2.getId();
         Long lesson1Id = lesson1.getId();
         Long lesson3Id = lesson3.getId();
 
-        // Проверка курса
+        // Очищаем контекст — данные должны быть в БД
+        entityManager.clear();
+
+        // Загружаем курс заново из БД
         Course loadedCourse = courseRepository.findById(courseId).orElseThrow();
-        assertEquals(2, loadedCourse.getModules().size());
+        assertEquals(2, loadedCourse.getModules().size(),
+                "Курс должен содержать 2 модуля");
+        assertEquals("UI/UX Дизайн", loadedCourse.getTitle());
 
-        // Проверка модулей
+        // Проверяем модули
         Module loadedModule1 = moduleRepository.findById(module1Id).orElseThrow();
-        assertEquals(2, loadedModule1.getLessons().size());
+        assertEquals(2, loadedModule1.getLessons().size(),
+                "Модуль 1 должен содержать 2 урока");
         assertEquals("Основы дизайна", loadedModule1.getTitle());
+        assertEquals(courseId, loadedModule1.getCourse().getId(),
+                "Внешний ключ модуля должен ссылаться на курс");
 
-        Module loadedModule2 = moduleRepository.findById(module2.getId()).orElseThrow();
-        assertEquals(1, loadedModule2.getLessons().size());
+        Module loadedModule2 = moduleRepository.findById(module2Id).orElseThrow();
+        assertEquals(1, loadedModule2.getLessons().size(),
+                "Модуль 2 должен содержать 1 урок");
+        assertEquals("Прототипирование", loadedModule2.getTitle());
 
-        // Проверка уроков
+        // Проверяем уроки
         Lesson loadedLesson1 = lessonRepository.findById(lesson1Id).orElseThrow();
         assertEquals("Принципы дизайна", loadedLesson1.getTitle());
+        assertEquals(module1Id, loadedLesson1.getModule().getId(),
+                "Внешний ключ урока должен ссылаться на модуль");
 
         Lesson loadedLesson3 = lessonRepository.findById(lesson3Id).orElseThrow();
-        assertEquals("Инструменты прототипирования", loadedLesson3.getTitle());
+        assertEquals("Инструменты", loadedLesson3.getTitle());
         assertEquals("https://example.com/prototype", loadedLesson3.getVideoUrl());
     }
 
     /**
-     * Тест: каскадное удаление курса удаляет модули и уроки.
-     * После удаления курса все вложенные объекты должны быть удалены.
+     * Тест: каскадное удаление курса удаляет модули и уроки, но не общие объекты.
+     * <p>
+     * Сохраняет категорию и преподавателя, создаёт курс с модулями и уроками,
+     * запоминает ID всех объектов. После удаления курса проверяет отсутствие
+     * курса, модулей и уроков, но сохранение категории и преподавателя.
+     * </p>
      */
     @Test
     void testCascadeDeleteCourseRemovesModulesAndLessons() {
+        // Сохраняем общие объекты
         Category category = createCategory("Маркетинг");
         User teacher = createTeacher("teacher_delete@example.com");
-        Course course = createCourse("Основы маркетинга", teacher, category);
 
-        Module module1 = new Module();
-        module1.setTitle("Стратегия");
-        module1.setOrderIndex(1);
-        module1.setCourse(course);
+        // Создаём курс с модулями и уроками
+        Course course = new Course("Основы маркетинга", "Введение в маркетинг", 25,
+                LocalDate.of(2026, 9, 1), teacher, category);
 
-        Module module2 = new Module();
-        module2.setTitle("Аналитика");
-        module2.setOrderIndex(2);
-        module2.setCourse(course);
+        Module module1 = new Module("Стратегия", "Маркетинговые стратегии", 1, course);
+        course.getModules().add(module1);
 
-        Lesson lesson1 = new Lesson();
-        lesson1.setTitle("Виды стратегий");
-        lesson1.setModule(module1);
+        Module module2 = new Module("Аналитика", "Метрики и KPI", 2, course);
+        course.getModules().add(module2);
+
+        Lesson lesson1 = new Lesson("Виды стратегий", "Описание стратегий", null, module1);
         module1.getLessons().add(lesson1);
 
-        Lesson lesson2 = new Lesson();
-        lesson2.setTitle("KPI метрики");
-        lesson2.setModule(module2);
+        Lesson lesson2 = new Lesson("KPI метрики", "Основные метрики", null, module2);
         module2.getLessons().add(lesson2);
 
-        // Корректные двусторонние связи
-        course.getModules().add(module1);
-        course.getModules().add(module2);
-        module1.setCourse(course);
-        module2.setCourse(course);
-        lesson1.setModule(module1);
-        lesson2.setModule(module2);
-
-        entityManager.persist(module1);
-        entityManager.persist(module2);
-        entityManager.persist(lesson1);
-        entityManager.persist(lesson2);
-        entityManager.merge(course);
+        // Сохраняем только курс — каскады сохранят всё
+        entityManager.persist(course);
         entityManager.flush();
 
+        // Запоминаем ID
         Long courseId = course.getId();
         Long module1Id = module1.getId();
+        Long module2Id = module2.getId();
         Long lesson1Id = lesson1.getId();
+        Long lesson2Id = lesson2.getId();
+        Long teacherId = teacher.getId();
+        Long categoryId = category.getId();
 
+        // Удаляем курс
         courseRepository.deleteById(courseId);
         entityManager.flush();
 
+        // Проверка: курс, модули и уроки удалены
         assertFalse(courseRepository.findById(courseId).isPresent(),
                 "Курс должен быть удалён");
         assertFalse(moduleRepository.findById(module1Id).isPresent(),
-                "Модуль должен быть удалён");
+                "Модуль 1 должен быть удалён");
+        assertFalse(moduleRepository.findById(module2Id).isPresent(),
+                "Модуль 2 должен быть удалён");
         assertFalse(lessonRepository.findById(lesson1Id).isPresent(),
-                "Урок должен быть удалён");
+                "Урок 1 должен быть удалён");
+        assertFalse(lessonRepository.findById(lesson2Id).isPresent(),
+                "Урок 2 должен быть удалён");
+
+        // Проверка: общие объекты сохранены
+        assertTrue(categoryRepository.findById(categoryId).isPresent(),
+                "Категория не должна быть удалена");
+        assertTrue(userRepository.findById(teacherId).isPresent(),
+                "Преподаватель не должен быть удалён");
     }
 
     /**

@@ -101,6 +101,9 @@ class CategoryAndCourseTests {
         Long categoryId = category.getId();
         assertNotNull(categoryId, "Идентификатор категории не должен быть null после сохранения");
 
+        // Очищаем контекст и загружаем из БД
+        entityManager.clear();
+
         // Чтение курса
         Course savedCourse = courseRepository.findById(courseId).orElseThrow();
         assertEquals("Введение в Java", savedCourse.getTitle());
@@ -187,7 +190,8 @@ class CategoryAndCourseTests {
         entityManager.merge(loaded);
         entityManager.flush();
 
-        // Проверка обновлённых данных
+        // Проверка обновлённых данных (после очистки контекста)
+        entityManager.clear();
         Course updated = courseRepository.findById(course.getId()).orElseThrow();
         assertEquals("Маркетинг: продвинутый курс", updated.getTitle());
         assertEquals("Расширенный курс по digital-маркетингу.", updated.getDescription());

@@ -87,14 +87,16 @@ class UserAndProfileTests {
         Long userId = user.getId();
         assertNotNull(userId, "Идентификатор пользователя не должен быть null после сохранения");
 
-        // Чтение профиля по ID
+        // Чтение профиля по ID (после очистки контекста)
+        entityManager.clear();
         Profile savedProfile = profileRepository.findById(profileId).orElseThrow();
         assertNotNull(savedProfile.getDisplayName(), "Отображаемое имя должно быть сохранено");
         assertEquals("Алиса Иванова", savedProfile.getDisplayName());
         assertEquals("Студентка, изучает Java.", savedProfile.getBio());
         assertEquals("https://example.com/alice.jpg", savedProfile.getAvatarUrl());
 
-        // Чтение пользователя по ID
+        // Чтение пользователя по ID (после очистки контекста)
+        entityManager.clear();
         User savedUser = userRepository.findById(userId).orElseThrow();
         assertEquals("alice@example.com", savedUser.getEmail());
         assertEquals(UserRole.STUDENT, savedUser.getRole());
