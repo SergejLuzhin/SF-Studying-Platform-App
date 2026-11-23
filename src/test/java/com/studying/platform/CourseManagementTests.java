@@ -7,6 +7,7 @@ import com.studying.platform.entity.Module;
 import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
+import com.studying.platform.repository.AssignmentRepository;
 import com.studying.platform.repository.CategoryRepository;
 import com.studying.platform.repository.CourseRepository;
 import com.studying.platform.repository.LessonRepository;
@@ -92,6 +93,12 @@ class CourseManagementTests {
     private CourseService courseService;
 
     /**
+     * Репозиторий для сущности Assignment.
+     */
+    @Autowired
+    private AssignmentRepository assignmentRepository;
+
+    /**
      * Инициализирует сервисный слой перед каждым тестом.
      */
     @BeforeEach
@@ -102,7 +109,8 @@ class CourseManagementTests {
                 lessonRepository,
                 userRepository,
                 categoryRepository,
-                entityManager
+                entityManager,
+                assignmentRepository
         );
     }
 

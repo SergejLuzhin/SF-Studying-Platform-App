@@ -82,7 +82,7 @@ class PostgresSchemaTests {
      * Проверяет наличие всех реализованных таблиц в схеме.
      * <p>
      * Ожидаемые таблицы: users, profiles, categories, courses, modules,
-     * lessons, enrollments, tags, course_reviews, course_tag.
+     * lessons, enrollments, tags, course_reviews, course_tag, assignments.
      * </p>
      *
      * @param dataSource автоматически настроенный Spring DataSource
@@ -93,7 +93,8 @@ class PostgresSchemaTests {
         String[] expectedTables = {
                 "users", "profiles", "categories", "courses",
                 "modules", "lessons", "enrollments",
-                "tags", "course_reviews", "course_tag"
+                "tags", "course_reviews", "course_tag",
+                "assignments"
         };
 
         try (Connection connection = dataSource.getConnection()) {
@@ -139,6 +140,7 @@ class PostgresSchemaTests {
         expectedPks.put("tags", Set.of("id"));
         expectedPks.put("course_reviews", Set.of("id"));
         expectedPks.put("course_tag", Set.of("course_id", "tag_id"));
+        expectedPks.put("assignments", Set.of("id"));
 
         try (Connection connection = dataSource.getConnection()) {
             String schema = currentSchema(connection);
@@ -189,7 +191,8 @@ class PostgresSchemaTests {
                 {"course_reviews", "course_id", "courses", "id"},
                 {"course_reviews", "student_id", "users", "id"},
                 {"course_tag", "course_id", "courses", "id"},
-                {"course_tag", "tag_id", "tags", "id"}
+                {"course_tag", "tag_id", "tags", "id"},
+                {"assignments", "lesson_id", "lessons", "id"}
         };
 
         try (Connection connection = dataSource.getConnection()) {

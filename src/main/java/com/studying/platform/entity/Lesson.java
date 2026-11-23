@@ -9,7 +9,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Сущность «Урок» учебной платформы.
@@ -17,9 +21,11 @@ import jakarta.persistence.Table;
  * Представляет отдельный урок внутри модуля курса. Содержит текстовое
  * содержание, ссылку на видео и привязку к родительскому модулю.
  * Связь с модулем — «многие-к-одному», загружается лениво.
+ * Связь с заданиями — «один-ко-многим», загружается лениво.
  * </p>
  *
  * @see Module
+ * @see Assignment
  */
 @Entity
 @Table(name = "lessons")
@@ -58,6 +64,13 @@ public class Lesson {
     @JoinColumn(name = "module_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_lesson_module"))
     private Module module;
+
+    /**
+     * Задания урока. Загружаются лениво.
+     * Владелец обратной связи — сущность {@link Assignment}.
+     */
+    @OneToMany(mappedBy = "lesson", fetch = FetchType.LAZY)
+    private Set<Assignment> assignments = new HashSet<>();
 
     /**
      * Публичный конструктор по умолчанию, требуемый JPA-провайдером.
@@ -168,5 +181,23 @@ public class Lesson {
      */
     public void setModule(Module module) {
         this.module = module;
+    }
+
+    /**
+     * Возвращает коллекцию заданий урока.
+     *
+     * @return коллекция заданий
+     */
+    public Set<Assignment> getAssignments() {
+        return assignments;
+    }
+
+    /**
+     * Устанавливает коллекцию заданий урока.
+     *
+     * @param assignments коллекция заданий
+     */
+    public void setAssignments(Set<Assignment> assignments) {
+        this.assignments = assignments;
     }
 }

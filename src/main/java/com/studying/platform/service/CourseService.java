@@ -1,5 +1,6 @@
 package com.studying.platform.service;
 
+import com.studying.platform.entity.Assignment;
 import com.studying.platform.entity.Category;
 import com.studying.platform.entity.Course;
 import com.studying.platform.entity.Lesson;
@@ -7,6 +8,7 @@ import com.studying.platform.entity.Module;
 import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
+import com.studying.platform.repository.AssignmentRepository;
 import com.studying.platform.repository.CategoryRepository;
 import com.studying.platform.repository.CourseRepository;
 import com.studying.platform.repository.LessonRepository;
@@ -16,6 +18,7 @@ import jakarta.persistence.EntityManager;
 
 import java.time.LocalDate;
 import java.util.Iterator;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +69,11 @@ public class CourseService {
     private final EntityManager entityManager;
 
     /**
+     * Репозиторий для работы с сущностью «Задание».
+     */
+    private final AssignmentRepository assignmentRepository;
+
+    /**
      * Конструктор сервиса с внедрением зависимостей через конструктор.
      *
      * @param courseRepository   репозиторий курсов
@@ -74,19 +82,22 @@ public class CourseService {
      * @param userRepository     репозиторий пользователей
      * @param categoryRepository репозиторий категорий
      * @param entityManager      менеджер сущностей JPA
+     * @param assignmentRepository репозиторий заданий
      */
     public CourseService(CourseRepository courseRepository,
                          ModuleRepository moduleRepository,
                          LessonRepository lessonRepository,
                          UserRepository userRepository,
                          CategoryRepository categoryRepository,
-                         EntityManager entityManager) {
+                         EntityManager entityManager,
+                         AssignmentRepository assignmentRepository) {
         this.courseRepository = courseRepository;
         this.moduleRepository = moduleRepository;
         this.lessonRepository = lessonRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
         this.entityManager = entityManager;
+        this.assignmentRepository = assignmentRepository;
     }
 
     /**
@@ -283,5 +294,104 @@ public class CourseService {
         }
 
         return course;
+    }
+
+    /**
+     * Создаёт новое задание для указанного урока.
+     * <p>
+     * Проверяет существование урока по идентификатору. Если урок не найден —
+     * выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param lessonId    идентификатор урока
+     * @param title       название задания
+     * @param description описание задания
+     * @param dueDate     срок выполнения
+     * @param maxScore    максимальный балл
+     * @return сохранённое задание
+     * @throws ResourceNotFoundException если урок с заданным идентификатором не найден
+     */
+    public Assignment createAssignment(Long lessonId, String title,
+                                       String description, LocalDate dueDate,
+                                       Integer maxScore) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Урок с идентификатором " + lessonId + " не найден"));
+
+        Assignment assignment = new Assignment(lesson, title, description, dueDate, maxScore);
+        entityManager.persist(assignment);
+        entityManager.flush();
+        return assignment;
+    }
+
+    /**
+     * Обновляет поля существующего задания.
+     * <p>
+     * Проверяет существование задания по идентификатору. Обновляет только
+     * не-{@code null} поля: название, описание, срок выполнения, максимальный балл.
+     * </p>
+     *
+     * @param assignmentId  идентификатор задания для обновления
+     * @param title         новое название задания
+     * @param description   новое описание задания
+     * @param dueDate       новая дата окончания выполнения
+     * @param maxScore      новый максимальный балл
+     * @return обновлённое задание
+     * @throws ResourceNotFoundException если задание с заданным идентификатором не найдено
+     */
+    public Assignment updateAssignment(Long assignmentId, String title,
+                                       String description, LocalDate dueDate,
+                                       Integer maxScore) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Задание с идентификатором " + assignmentId + " не найдено"));
+
+        if (title != null) {
+            assignment.setTitle(title);
+        }
+        if (description != null) {
+            assignment.setDescription(description);
+        }
+        if (dueDate != null) {
+            assignment.setDueDate(dueDate);
+        }
+        if (maxScore != null) {
+            assignment.setMaxScore(maxScore);
+        }
+
+        return assignmentRepository.save(assignment);
+    }
+
+    /**
+     * Удаляет задание по идентификатору.
+     * <p>
+     * Проверяет существование задания. Если задание не найдено —
+     * выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param assignmentId идентификатор задания для удаления
+     * @throws ResourceNotFoundException если задание с заданным идентификатором не найдено
+     */
+    public void deleteAssignment(Long assignmentId) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Задание с идентификатором " + assignmentId + " не найдено"));
+
+        assignmentRepository.delete(assignment);
+        entityManager.flush();
+    }
+
+    /**
+     * Возвращает все задания указанного урока.
+     * <p>
+     * Использует специализированный метод репозитория {@code findByLessonId}
+     * для эффективной выборки по идентификатору урока.
+     * </p>
+     *
+     * @param lessonId идентификатор урока
+     * @return список заданий урока
+     */
+    public List<Assignment> getAssignmentsByLessonId(Long lessonId) {
+        return assignmentRepository.findByLessonId(lessonId);
     }
 }
