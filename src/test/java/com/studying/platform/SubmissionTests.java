@@ -369,6 +369,201 @@ class SubmissionTests {
                 "Задание в решении должно совпадать с созданным");
     }
 
+    // ==================== Тесты оценивания ====================
+
+    /**
+     * Тест: успешное выставление оценки и комментария к решению.
+     */
+    @Test
+    void gradeSubmission_shouldSaveScoreAndFeedback() {
+        Category category = createCategory("Алгебра");
+        User teacher = createTeacher("teacher.grade.success@example.com");
+        Course course = createCourse("Линейная алгебра", teacher, category);
+        Module module = createModule("Матрицы", course, 1);
+        Lesson lesson = createLesson("Операции", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ 1", "Определители",
+                LocalDate.of(2026, 11, 1), 100);
+
+        User student = createStudent("student.grade.success@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Ответ на determinante");
+
+        // Выставляем оценку
+        submissionService.gradeSubmission(submission.getId(), 85, "Хорошая работа, но есть недочёты", teacher.getId());
+
+        // Проверка: загрузка и сверка полей
+        Submission graded = submissionRepository.findById(submission.getId()).orElseThrow();
+        assertEquals(85, graded.getScore(), "Оценка должна быть 85");
+        assertEquals("Хорошая работа, но есть недочёты", graded.getFeedback(),
+                "Комментарий должен совпадать");
+    }
+
+    /**
+     * Тест: выставление оценки 0 (минимальный балл).
+     */
+    @Test
+    void gradeSubmission_zeroScore() {
+        Category category = createCategory("Физика");
+        User teacher = createTeacher("teacher.grade.zero@example.com");
+        Course course = createCourse("Механика", teacher, category);
+        Module module = createModule("Законы Ньютона", course, 1);
+        Lesson lesson = createLesson("Первый закон", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ", "Задачи на силу",
+                LocalDate.of(2026, 11, 1), 100);
+
+        User student = createStudent("student.grade.zero@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Нет решения");
+
+        submissionService.gradeSubmission(submission.getId(), 0, "Решение не представлено", teacher.getId());
+
+        Submission graded = submissionRepository.findById(submission.getId()).orElseThrow();
+        assertEquals(0, graded.getScore(), "Оценка 0 должна быть допустима");
+    }
+
+    /**
+     * Тест: выставление оценки, равной максимальному баллу задания.
+     */
+    @Test
+    void gradeSubmission_maxScore() {
+        Category category = createCategory("Химия");
+        User teacher = createTeacher("teacher.grade.max@example.com");
+        Course course = createCourse("Органическая химия", teacher, category);
+        Module module = createModule("Реакции", course, 1);
+        Lesson lesson = createLesson("Типы реакций", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ", "Уравнять реакции",
+                LocalDate.of(2026, 11, 1), 75);
+
+        User student = createStudent("student.grade.max@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Все реакции уравнены верно");
+
+        submissionService.gradeSubmission(submission.getId(), 75, "Отлично!", teacher.getId());
+
+        Submission graded = submissionRepository.findById(submission.getId()).orElseThrow();
+        assertEquals(75, graded.getScore(), "Оценка, равная maxScore, должна быть допустима");
+    }
+
+    /**
+     * Тест: выставление оценки, когда maxScore задания равен null (нет верхней границы).
+     */
+    @Test
+    void gradeSubmission_noMaxScoreLimit() {
+        Category category = createCategory("История");
+        User teacher = createTeacher("teacher.grade.noLimit@example.com");
+        Course course = createCourse("История России", teacher, category);
+        Module module = createModule("XVIII век", course, 1);
+        Lesson lesson = createLesson("Эпоха Петра I", null, module);
+        Assignment assignment = createAssignment(lesson, "Сочинение", "О реформах Петра",
+                LocalDate.of(2026, 11, 1), null);
+
+        User student = createStudent("student.grade.noLimit@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Развёрнутое сочинение");
+
+        // Оценка 90 при null maxScore — должна быть допустима
+        submissionService.gradeSubmission(submission.getId(), 90, "Превосходная работа", teacher.getId());
+
+        Submission graded = submissionRepository.findById(submission.getId()).orElseThrow();
+        assertEquals(90, graded.getScore(), "Оценка 90 должна быть допустима при null maxScore");
+    }
+
+    /**
+     * Тест: перезапись ранее выставленной оценки.
+     */
+    @Test
+    void gradeSubmission_regrade() {
+        Category category = createCategory("Математика");
+        User teacher = createTeacher("teacher.grade.regrade@example.com");
+        Course course = createCourse("Математический анализ", teacher, category);
+        Module module = createModule("Пределы", course, 1);
+        Lesson lesson = createLesson("Предел последовательности", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ", "Найти пределы",
+                LocalDate.of(2026, 11, 1), 100);
+
+        User student = createStudent("student.grade.regrade@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Ответ на пределы");
+
+        // Первая оценка
+        submissionService.gradeSubmission(submission.getId(), 70, "Почти правильно", teacher.getId());
+        Submission first = submissionRepository.findById(submission.getId()).orElseThrow();
+        assertEquals(70, first.getScore(), "Первая оценка должна быть 70");
+
+        // Перезапись оценки
+        submissionService.gradeSubmission(submission.getId(), 85, "Исправил замечания", teacher.getId());
+        Submission regraded = submissionRepository.findById(submission.getId()).orElseThrow();
+        assertEquals(85, regraded.getScore(), "Оценка должна быть обновлена до 85");
+        assertEquals("Исправил замечания", regraded.getFeedback(), "Комментарий должен быть обновлён");
+    }
+
+    // ==================== Тесты получения списков ====================
+
+    /**
+     * Тест: получение списка решений по заданию через сервис.
+     */
+    @Test
+    void getSubmissionsByAssignment() {
+        Category category = createCategory("Информатика");
+        User teacher = createTeacher("teacher.list.assign@example.com");
+        Course course = createCourse("Алгоритмы", teacher, category);
+        Module module = createModule("Сортировки", course, 1);
+        Lesson lesson = createLesson("Быстрая сортировка", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ 1", "Реализовать быструю сортировку",
+                LocalDate.of(2026, 11, 1), 100);
+
+        User student1 = createStudent("list.student1@example.com");
+        User student2 = createStudent("list.student2@example.com");
+        User student3 = createStudent("list.student3@example.com");
+        createEnrollment(student1, course, EnrollmentStatus.ACTIVE);
+        createEnrollment(student2, course, EnrollmentStatus.ACTIVE);
+        createEnrollment(student3, course, EnrollmentStatus.ACTIVE);
+
+        submissionService.submitSolution(assignment.getId(), student1.getId(), "Быстрая сортировка на Java");
+        submissionService.submitSolution(assignment.getId(), student2.getId(), "Быстрая сортировка на Python");
+
+        List<Submission> submissions = submissionService.getSubmissionsByAssignment(assignment.getId());
+        assertEquals(2, submissions.size(),
+                "Должно быть найдено 2 решения для данного задания");
+    }
+
+    /**
+     * Тест: получение списка решений по студенту через сервис.
+     */
+    @Test
+    void getSubmissionsByStudent() {
+        Category category = createCategory("Биология");
+        User teacher = createTeacher("teacher.list.student@example.com");
+        Course course = createCourse("Молекулярная биология", teacher, category);
+        Module module = createModule("ДНК", course, 1);
+        Lesson lesson1 = createLesson("Структура ДНК", null, module);
+        Lesson lesson2 = createLesson("Репликация", null, module);
+        Assignment assignment1 = createAssignment(lesson1, "ДЗ 1", "Описать структуру",
+                LocalDate.of(2026, 11, 1), 80);
+        Assignment assignment2 = createAssignment(lesson2, "ДЗ 2", "Описать процесс",
+                LocalDate.of(2026, 11, 15), 90);
+
+        User student = createStudent("list.mysolutions@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        submissionService.submitSolution(assignment1.getId(), student.getId(), "Двойная спираль");
+        submissionService.submitSolution(assignment2.getId(), student.getId(), "Полуконсервативная репликация");
+
+        List<Submission> submissions = submissionService.getSubmissionsByStudent(student.getId());
+        assertEquals(2, submissions.size(),
+                "Должно быть найдено 2 решения данного студента");
+    }
+
     // ==================== Негативные тесты ====================
 
     /**
@@ -587,6 +782,112 @@ class SubmissionTests {
             entityManager.persist(duplicate);
             entityManager.flush();
         }, "Составное уникальное ограничение должно предотвратить дублирование решения");
+    }
+
+    // ==================== Негативные тесты оценивания ====================
+
+    /**
+     * Тест: попытка оценить несуществующее решение.
+     */
+    @Test
+    void gradeSubmission_nonExistent_shouldThrow() {
+        User teacher = createTeacher("teacher.grade.nonexist@example.com");
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                submissionService.gradeSubmission(99999L, 80, "Невозможно оценить", teacher.getId()),
+                "Должно быть выброшено исключение при оценке несуществующего решения");
+    }
+
+    /**
+     * Тест: попытка выставить отрицательную оценку.
+     */
+    @Test
+    void gradeSubmission_negativeScore_shouldThrow() {
+        Category category = createCategory("Геометрия");
+        User teacher = createTeacher("teacher.grade.negative@example.com");
+        Course course = createCourse("Начертательная геометрия", teacher, category);
+        Module module = createModule("Проекции", course, 1);
+        Lesson lesson = createLesson("Метод Монжа", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ", "Построить проекции",
+                LocalDate.of(2026, 11, 1), 100);
+
+        User student = createStudent("student.grade.negative@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Проекции построены");
+
+        assertThrows(IllegalArgumentException.class, () ->
+                submissionService.gradeSubmission(submission.getId(), -1, "Отрицательная оценка", teacher.getId()),
+                "Должно быть выброшено исключение при отрицательной оценке");
+    }
+
+    /**
+     * Тест: попытка выставить оценку больше maxScore.
+     */
+    @Test
+    void gradeSubmission_exceedsMaxScore_shouldThrow() {
+        Category category = createCategory("Экономика");
+        User teacher = createTeacher("teacher.grade.exceeds@example.com");
+        Course course = createCourse("Микроэкономика", teacher, category);
+        Module module = createModule("Рынки", course, 1);
+        Lesson lesson = createLesson("Совершенная конкуренция", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ", "Анализ рынка",
+                LocalDate.of(2026, 11, 1), 80);
+
+        User student = createStudent("student.grade.exceeds@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Анализ проведён");
+
+        assertThrows(IllegalArgumentException.class, () ->
+                submissionService.gradeSubmission(submission.getId(), 81, "Слишком высокая оценка", teacher.getId()),
+                "Должно быть выброшено исключение при оценке больше maxScore");
+    }
+
+    /**
+     * Тест: попытка оценить с несуществующим teacherId.
+     */
+    @Test
+    void gradeSubmission_teacherNotFound_shouldThrow() {
+        Category category = createCategory("Философия");
+        User teacher = createTeacher("teacher.grade.nofind@example.com");
+        Course course = createCourse("Этика", teacher, category);
+        Module module = createModule("Нравственность", course, 1);
+        Lesson lesson = createLesson("Категорический императив", null, module);
+        Assignment assignment = createAssignment(lesson, "ДЗ", "Эссе",
+                LocalDate.of(2026, 11, 1), 100);
+
+        User student = createStudent("student.grade.nofind@example.com");
+        createEnrollment(student, course, EnrollmentStatus.ACTIVE);
+
+        Submission submission = submissionService.submitSolution(
+                assignment.getId(), student.getId(), "Эссе о Канте");
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                submissionService.gradeSubmission(submission.getId(), 80, "Хорошо", 99999L),
+                "Должно быть выброшено исключение при несуществующем преподавателе");
+    }
+
+    /**
+     * Тест: getSubmissionsByAssignment с несуществующим заданием.
+     */
+    @Test
+    void getSubmissionsByAssignment_notFound_shouldThrow() {
+        assertThrows(ResourceNotFoundException.class, () ->
+                submissionService.getSubmissionsByAssignment(99999L),
+                "Должно быть выброшено исключение при несуществующем задании");
+    }
+
+    /**
+     * Тест: getSubmissionsByStudent с несуществующим студентом.
+     */
+    @Test
+    void getSubmissionsByStudent_notFound_shouldThrow() {
+        assertThrows(ResourceNotFoundException.class, () ->
+                submissionService.getSubmissionsByStudent(99999L),
+                "Должно быть выброшено исключение при несуществующем студенте");
     }
 
     /**
