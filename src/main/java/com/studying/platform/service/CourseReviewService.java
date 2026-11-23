@@ -84,7 +84,6 @@ public class CourseReviewService {
 
     /**
      * Создаёт новый отзыв студента о курсе.
-     * <p>
      * Выполняет полную валидацию:
      * <ol>
      *   <li>Проверяет существование студента — {@link ResourceNotFoundException}, если не найден.</li>
@@ -94,7 +93,6 @@ public class CourseReviewService {
      *   <li>Проверяет диапазон рейтинга (1–5) — {@link IllegalArgumentException}, если вне диапазона.</li>
      *   <li>Проверяет уникальность отзыва (один студент — один отзыв на курс) — {@link IllegalStateException}, если отзыв уже оставлен.</li>
      * </ol>
-     * </p>
      *
      * @param studentId идентификатор студента
      * @param courseId  идентификатор курса

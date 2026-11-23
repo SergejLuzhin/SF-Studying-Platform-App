@@ -26,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @ActiveProfiles("test")
 class CourseDeletionTransactionTests {
+    /** Создаёт экземпляр тестов удаления курса для JUnit. */
+    CourseDeletionTransactionTests() {
+    }
+
     @Autowired private CourseService service;
     @Autowired private EntityManager em;
     @Autowired private TransactionTemplate transactions;
@@ -38,7 +42,11 @@ class CourseDeletionTransactionTests {
     /** Виды учебной истории для независимой проверки каждого запрета. */
     enum History { ACTIVE, DROPPED, SUBMISSION, QUIZ_RESULT, REVIEW }
 
-    /** Создаёт подтверждённую фикстуру с выбранным содержимым и уникальными данными. */
+    /** Создаёт подтверждённую фикстуру с выбранным содержимым и уникальными данными.
+     * @param assignment создать ли задание с уроком
+     * @param quiz создать ли тест с вопросом и вариантом ответа
+     * @param sharedTag создать ли общий тег и второй курс
+     */
     private void createFixture(boolean assignment, boolean quiz, boolean sharedTag) {
         transactions.executeWithoutResult(status -> {
             String unique = UUID.randomUUID().toString();

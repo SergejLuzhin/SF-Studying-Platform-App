@@ -33,6 +33,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @ActiveProfiles("test")
 class SubmissionGradingTransactionTests {
+    /** Создаёт экземпляр тестов оценивания для JUnit. */
+    SubmissionGradingTransactionTests() {
+    }
+
     @Autowired private SubmissionService service;
     @Autowired private EntityManager em;
     @Autowired private TransactionTemplate transactions;

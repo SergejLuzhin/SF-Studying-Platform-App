@@ -40,6 +40,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @ActiveProfiles("test")
 class QuizReadinessTransactionTests {
+    /** Создаёт экземпляр тестов готовности для JUnit. */
+    QuizReadinessTransactionTests() {
+    }
+
     @Autowired private QuizSubmissionService service;
     @Autowired private EntityManager em;
     @Autowired private TransactionTemplate transactions;
