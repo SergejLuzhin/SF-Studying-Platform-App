@@ -12,6 +12,7 @@ import com.studying.platform.repository.CategoryRepository;
 import com.studying.platform.repository.CourseRepository;
 import com.studying.platform.repository.LessonRepository;
 import com.studying.platform.repository.ModuleRepository;
+import com.studying.platform.repository.TagRepository;
 import com.studying.platform.repository.UserRepository;
 import com.studying.platform.service.CourseService;
 import jakarta.persistence.EntityManager;
@@ -99,6 +100,12 @@ class CourseManagementTests {
     private AssignmentRepository assignmentRepository;
 
     /**
+     * Репозиторий для сущности Tag.
+     */
+    @Autowired
+    private TagRepository tagRepository;
+
+    /**
      * Инициализирует сервисный слой перед каждым тестом.
      */
     @BeforeEach
@@ -110,7 +117,8 @@ class CourseManagementTests {
                 userRepository,
                 categoryRepository,
                 entityManager,
-                assignmentRepository
+                assignmentRepository,
+                tagRepository
         );
     }
 

@@ -2,6 +2,7 @@ package com.studying.platform.repository;
 
 import com.studying.platform.entity.Course;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Optional;
 
@@ -30,4 +31,17 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
      * @return true, если курс с заданным идентификатором существует
      */
     boolean existsById(Long id);
+
+    /**
+     * Возвращает количество тегов, связанных с указанным курсом.
+     * <p>
+     * Использует JPQL-запрос с JOIN для подсчёта тегов
+     * без загрузки ленивой коллекции тегов.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @return количество тегов курса
+     */
+    @Query("SELECT COUNT(t) FROM Course c JOIN c.tags t WHERE c.id = ?1")
+    long countTagsByCourseId(Long courseId);
 }

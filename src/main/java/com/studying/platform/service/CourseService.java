@@ -5,6 +5,7 @@ import com.studying.platform.entity.Category;
 import com.studying.platform.entity.Course;
 import com.studying.platform.entity.Lesson;
 import com.studying.platform.entity.Module;
+import com.studying.platform.entity.Tag;
 import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
@@ -13,26 +14,30 @@ import com.studying.platform.repository.CategoryRepository;
 import com.studying.platform.repository.CourseRepository;
 import com.studying.platform.repository.LessonRepository;
 import com.studying.platform.repository.ModuleRepository;
+import com.studying.platform.repository.TagRepository;
 import com.studying.platform.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Сервис для управления курсами, модулями и уроками учебной платформы.
+ * Сервис для управления курсами, модулями, уроками и тегами учебной платформы.
  * <p>
  * Обеспечивает бизнес-логику создания, изменения и получения структуры курса,
- * а также добавления модулей и уроков. Все публичные методы транзакционны.
+ * а также добавления модулей, уроков и управления тегами. Все публичные методы транзакционны.
  * </p>
  *
  * @see Course
  * @see Module
  * @see Lesson
+ * @see Tag
  */
 @Service
 @Transactional
@@ -74,6 +79,11 @@ public class CourseService {
     private final AssignmentRepository assignmentRepository;
 
     /**
+     * Репозиторий для работы с сущностью «Тег».
+     */
+    private final TagRepository tagRepository;
+
+    /**
      * Конструктор сервиса с внедрением зависимостей через конструктор.
      *
      * @param courseRepository   репозиторий курсов
@@ -83,6 +93,7 @@ public class CourseService {
      * @param categoryRepository репозиторий категорий
      * @param entityManager      менеджер сущностей JPA
      * @param assignmentRepository репозиторий заданий
+     * @param tagRepository       репозиторий тегов
      */
     public CourseService(CourseRepository courseRepository,
                          ModuleRepository moduleRepository,
@@ -90,7 +101,8 @@ public class CourseService {
                          UserRepository userRepository,
                          CategoryRepository categoryRepository,
                          EntityManager entityManager,
-                         AssignmentRepository assignmentRepository) {
+                         AssignmentRepository assignmentRepository,
+                         TagRepository tagRepository) {
         this.courseRepository = courseRepository;
         this.moduleRepository = moduleRepository;
         this.lessonRepository = lessonRepository;
@@ -98,6 +110,7 @@ public class CourseService {
         this.categoryRepository = categoryRepository;
         this.entityManager = entityManager;
         this.assignmentRepository = assignmentRepository;
+        this.tagRepository = tagRepository;
     }
 
     /**
@@ -209,7 +222,7 @@ public class CourseService {
      * описанием и порядковым номером, привязывает к курсу и сохраняет.
      * Явное сохранение через {@code entityManager.persist(module)} гарантирует
      * запись модуля в базу данных; {@code flush} обеспечивает получение
-     * сгенерированного идентификатора. Сброс контекста не выполняется.
+     * сгенерированного идентификатора.
      * </p>
      *
      * @param courseId    идентификатор курса
@@ -225,7 +238,6 @@ public class CourseService {
                         "Курс с идентификатором " + courseId + " не найден"));
 
         Module module = new Module(title, description, orderIndex, course);
-        // Явное сохранение модуля, затем привязка к курсу
         entityManager.persist(module);
         course.getModules().add(module);
         entityManager.flush();
@@ -239,7 +251,7 @@ public class CourseService {
      * содержанием и ссылкой на видео, привязывает к модулю и сохраняет.
      * Явное сохранение через {@code entityManager.persist(lesson)} гарантирует
      * запись урока в базу данных; {@code flush} обеспечивает получение
-     * сгенерированного идентификатора. Сброс контекста не выполняется.
+     * сгенерированного идентификатора.
      * </p>
      *
      * @param moduleId идентификатор модуля
@@ -255,7 +267,6 @@ public class CourseService {
                         "Модуль с идентификатором " + moduleId + " не найден"));
 
         Lesson lesson = new Lesson(title, content, videoUrl, module);
-        // Явное сохранение урока, затем привязка к модулю
         entityManager.persist(lesson);
         module.getLessons().add(lesson);
         entityManager.flush();
@@ -393,5 +404,93 @@ public class CourseService {
      */
     public List<Assignment> getAssignmentsByLessonId(Long lessonId) {
         return assignmentRepository.findByLessonId(lessonId);
+    }
+
+    /**
+     * Привязывает существующие теги к курсу.
+     * <p>
+     * Проверяет существование курса и каждого тега.
+     * Если курс или какой-либо тег не найден — выбрасывает {@link ResourceNotFoundException}.
+     * Связь реализуется через вспомогательную таблицу {@code course_tag}.
+     * Каскады {@code PERSIST} и {@code MERGE} на коллекции тегов
+     * автоматически обрабатывают запись в таблицу связи.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @param tagIds   идентификаторы тегов для привязки
+     * @return обновлённый курс с привязанными тегами
+     * @throws ResourceNotFoundException если курс или какой-либо тег не найден
+     */
+    public Course addTagsToCourse(Long courseId, Set<Long> tagIds) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Курс с идентификатором " + courseId + " не найден"));
+
+        if (tagIds == null || tagIds.isEmpty()) {
+            return course;
+        }
+
+        List<Tag> tags = tagRepository.findAllById(tagIds);
+
+        // Проверка, что все переданные ID были найдены
+        Set<Long> foundIds = new HashSet<>();
+        for (Tag tag : tags) {
+            foundIds.add(tag.getId());
+        }
+
+        for (Long tagId : tagIds) {
+            if (!foundIds.contains(tagId)) {
+                throw new ResourceNotFoundException(
+                        "Тег с идентификатором " + tagId + " не найден");
+            }
+        }
+
+        course.getTags().addAll(tags);
+        entityManager.flush();
+        return course;
+    }
+
+    /**
+     * Отвязывает теги от курса.
+     * <p>
+     * Проверяет существование курса и каждого тега.
+     * Если курс не найден — выбрасывает {@link ResourceNotFoundException}.
+     * Если какой-либо тег не найден — выбрасывает {@link ResourceNotFoundException}.
+     * Удаляет связь из таблицы {@code course_tag}, но не удаляет сами теги из базы данных.
+     * Тег остаётся доступным для других курсов.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @param tagIds   идентификаторы тегов для удаления из курса
+     * @return обновлённый курс без указанных тегов
+     * @throws ResourceNotFoundException если курс или какой-либо тег не найден
+     */
+    public Course removeTagsFromCourse(Long courseId, Set<Long> tagIds) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Курс с идентификатором " + courseId + " не найден"));
+
+        if (tagIds == null || tagIds.isEmpty()) {
+            return course;
+        }
+
+        List<Tag> tags = tagRepository.findAllById(tagIds);
+
+        // Проверка, что все переданные ID были найдены
+        Set<Long> foundIds = new HashSet<>();
+        for (Tag tag : tags) {
+            foundIds.add(tag.getId());
+        }
+
+        for (Long tagId : tagIds) {
+            if (!foundIds.contains(tagId)) {
+                throw new ResourceNotFoundException(
+                        "Тег с идентификатором " + tagId + " не найден");
+            }
+        }
+
+        course.getTags().removeAll(tags);
+        entityManager.flush();
+        return course;
     }
 }

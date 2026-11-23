@@ -2,27 +2,26 @@
 
 ## Текущий этап
 
-Следующий этап — 14 «Отзывы и теги» (`pending`).
+Следующий этап — 15 «Удаление и целостность» (`pending`).
 
 ## Последние изменения
 
-### Этап 13. Прохождение тестов (completed)
+### Этап 14. Отзывы и теги (completed)
 
-- Создана сущность JPA: `QuizSubmission` (`id`, `quiz` ManyToOne, `student` ManyToOne, `score` Integer, `takenAt` LocalDateTime). Каскадное удаление не настроено.
-- Создан репозиторий: `QuizSubmissionRepository` (с методами `findByStudentId` и `findByQuizId`).
-- Создан сервис: `QuizSubmissionService` с методами `startQuiz` и `submitAnswers`.
-  - Реализована проверка активной записи на курс (`EnrollmentStatus.ACTIVE`).
-  - Вычисление балла по точному совпадению множеств выбранных и правильных ID вариантов ответа.
-  - Поддержка множественных попыток (каждый вызов создаёт новую запись).
-- Обновлён `PostgresSchemaTests`: добавлены проверки таблицы `quizsubmission`, её PK и FK.
-- Добавлены интеграционные тесты в `QuizSubmissionTests.java` (23 теста): позитивные сценарии, проверка записи на курс, точное совпадение множеств, частичное совпадение, лишние ID, множественные попытки, выборки, ограничения NOT NULL.
-- Обновлены `QuizRepository` и `QuestionRepository` с JPQL-запросами для предварительной загрузки вопросов и вариантов ответов.
+- Создан репозиторий: `TagRepository` (extends JpaRepository<Tag, Long>).
+- Дополнен репозиторий: `CourseReviewRepository` — добавлены методы `findByStudentIdAndCourseId`, `findByCourseId`, `findByStudentId`.
+- Дополнен репозиторий: `CourseRepository` — добавлен JPQL-метод `countTagsByCourseId` для подсчёта тегов без загрузки lazy-коллекции.
+- Дополнен `CourseService`: добавлены методы `addTagsToCourse(Set<Long>)`, `removeTagsFromCourse(Set<Long>)`; добавлена зависимость `TagRepository`.
+- Создан сервис: `CourseReviewService` с методами `createReview`, `getReviewsByCourse`, `getReviewsByStudent`.
+  - Реализована проверка: роль STUDENT, активная запись на курс (EnrollmentStatus.ACTIVE), рейтинг 1–5, уникальность отзыва.
+- Добавлены интеграционные тесты: `CourseReviewAndTagTests.java` (19 тестов) — позитивные сценарии (создание отзывов, чтение по курсу/студенту, привязка/отвязка тегов) и негативные (несуществующие ID, неверная роль, отсутствие записи, дублирование, некорректный рейтинг).
+- Исправлен `CourseManagementTests.java` — добавлена зависимость `TagRepository` в конструктор `CourseService`.
 
 ## Проверки
 
 - **PASS:** компиляция проекта и тестов (`mvn clean compile test-compile`).
 - **PASS:** `git diff --check` — без ошибок форматирования.
-- **PASS:** полный прогон всех тестов: 232 теста, 0 ошибок, 0 пропусков.
+- **PASS:** полный прогон всех тестов: 251 тест, 0 ошибок, 0 пропусков.
 
 ## База данных
 
