@@ -95,7 +95,8 @@ class PostgresSchemaTests {
                 "modules", "lessons", "enrollments",
                 "tags", "course_reviews", "course_tag",
                 "assignments", "submissions",
-                "quiz", "question", "answeroption"
+                "quiz", "question", "answeroption",
+                "quizsubmission"
         };
 
         try (Connection connection = dataSource.getConnection()) {
@@ -146,6 +147,7 @@ class PostgresSchemaTests {
         expectedPks.put("quiz", Set.of("id"));
         expectedPks.put("question", Set.of("id"));
         expectedPks.put("answeroption", Set.of("id"));
+        expectedPks.put("quizsubmission", Set.of("id"));
 
         try (Connection connection = dataSource.getConnection()) {
             String schema = currentSchema(connection);
@@ -202,7 +204,9 @@ class PostgresSchemaTests {
                 {"submissions", "student_id", "users", "id"},
                 {"quiz", "module_id", "modules", "id"},
                 {"question", "quiz_id", "quiz", "id"},
-                {"answeroption", "question_id", "question", "id"}
+                {"answeroption", "question_id", "question", "id"},
+                {"quizsubmission", "quiz_id", "quiz", "id"},
+                {"quizsubmission", "student_id", "users", "id"}
         };
 
         try (Connection connection = dataSource.getConnection()) {

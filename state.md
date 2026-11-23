@@ -2,26 +2,27 @@
 
 ## Текущий этап
 
-Следующий этап — 13 «Прохождение тестов» (`pending`).
+Следующий этап — 14 «Отзывы и теги» (`pending`).
 
 ## Последние изменения
 
-### Этап 12. Структура тестов (completed)
+### Этап 13. Прохождение тестов (completed)
 
-- Созданы сущности JPA: `Quiz`, `Question`, `AnswerOption`.
-  - `Quiz` — `@OneToOne` к `Module` (уникально, владелец связи), `@OneToMany` на `Question` (PERSIST, LAZY).
-  - `Question` — `@ManyToOne` к `Quiz`, `@OneToMany` на `AnswerOption` (PERSIST, LAZY). Поддержка `SINGLE_CHOICE` и `MULTIPLE_CHOICE` (несколько правильных вариантов).
-  - `AnswerOption` — `@ManyToOne` к `Question`. Поле `isCorrect` определяет правильность.
-- Создан enum `QuizQuestionType` (`SINGLE_CHOICE`, `MULTIPLE_CHOICE`).
-- Созданы репозитории: `QuizRepository` (с методом `findByModuleId`), `QuestionRepository`, `AnswerOptionRepository`.
-- Добавлены интеграционные тесты в `QuizStructureTest.java` (14 тестов): каскадное сохранение, поиск по ID модуля/викторины/вопроса, типы вопросов, ограничения уникальности и NOT NULL.
-- Обновлены `PostgresSchemaTests`: добавлены новые таблицы (`quiz`, `question`, `answeroption`), внешние ключи и уникальные ограничения для `quiz.module_id`.
+- Создана сущность JPA: `QuizSubmission` (`id`, `quiz` ManyToOne, `student` ManyToOne, `score` Integer, `takenAt` LocalDateTime). Каскадное удаление не настроено.
+- Создан репозиторий: `QuizSubmissionRepository` (с методами `findByStudentId` и `findByQuizId`).
+- Создан сервис: `QuizSubmissionService` с методами `startQuiz` и `submitAnswers`.
+  - Реализована проверка активной записи на курс (`EnrollmentStatus.ACTIVE`).
+  - Вычисление балла по точному совпадению множеств выбранных и правильных ID вариантов ответа.
+  - Поддержка множественных попыток (каждый вызов создаёт новую запись).
+- Обновлён `PostgresSchemaTests`: добавлены проверки таблицы `quizsubmission`, её PK и FK.
+- Добавлены интеграционные тесты в `QuizSubmissionTests.java` (23 теста): позитивные сценарии, проверка записи на курс, точное совпадение множеств, частичное совпадение, лишние ID, множественные попытки, выборки, ограничения NOT NULL.
+- Обновлены `QuizRepository` и `QuestionRepository` с JPQL-запросами для предварительной загрузки вопросов и вариантов ответов.
 
 ## Проверки
 
 - **PASS:** компиляция проекта и тестов (`mvn clean compile test-compile`).
 - **PASS:** `git diff --check` — без ошибок форматирования.
-- **PASS:** полный прогон всех тестов: 209 тестов, 0 ошибок, 0 пропусков.
+- **PASS:** полный прогон всех тестов: 232 теста, 0 ошибок, 0 пропусков.
 
 ## База данных
 
