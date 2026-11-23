@@ -6,11 +6,6 @@ import com.studying.platform.dto.QuestionRequestDto;
 import com.studying.platform.dto.QuestionResponseDto;
 import com.studying.platform.entity.AnswerOption;
 import com.studying.platform.entity.Question;
-import com.studying.platform.entity.Quiz;
-import com.studying.platform.repository.QuizRepository;
-import com.studying.platform.service.AnswerOptionService;
-import com.studying.platform.service.QuestionService;
-import com.studying.platform.service.QuizService;
 
 import jakarta.validation.Valid;
 
@@ -29,14 +24,15 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * REST-контроллер для управления вопросами и вариантами ответов викторины.
+ * REST-контроллер для управления вопросами викторины учебной платформы.
  * <p>
  * Предоставляет эндпоинты для создания, чтения, обновления и удаления вопросов,
- * а также создания, чтения, обновления и удаления вариантов ответов.
+ * а также создания и получения списка вариантов ответов.
+ * Отдельное управление вариантами ответов (GET/PUT/DELETE)
+ * реализовано в {@link com.studying.platform.controller.OptionController}.
  * </p>
  *
- * @see QuestionService
- * @see AnswerOptionService
+ * @see com.studying.platform.controller.OptionController
  */
 @RestController
 @RequestMapping("/api/question")
@@ -45,31 +41,23 @@ public class QuestionController {
     /**
      * Сервис для бизнес-логики вопросов.
      */
-    private final QuestionService questionService;
+    private final com.studying.platform.service.QuestionService questionService;
 
     /**
      * Сервис для бизнес-логики вариантов ответов.
      */
-    private final AnswerOptionService answerOptionService;
-
-    /**
-     * Репозиторий для работы с викторинами.
-     */
-    private final QuizRepository quizRepository;
+    private final com.studying.platform.service.AnswerOptionService answerOptionService;
 
     /**
      * Конструктор контроллера с внедрением зависимостей через конструктор.
      *
      * @param questionService      сервис вопросов
      * @param answerOptionService  сервис вариантов ответов
-     * @param quizRepository       репозиторий викторин
      */
-    public QuestionController(QuestionService questionService,
-                              AnswerOptionService answerOptionService,
-                              QuizRepository quizRepository) {
+    public QuestionController(com.studying.platform.service.QuestionService questionService,
+                               com.studying.platform.service.AnswerOptionService answerOptionService) {
         this.questionService = questionService;
         this.answerOptionService = answerOptionService;
-        this.quizRepository = quizRepository;
     }
 
     /**
@@ -104,6 +92,25 @@ public class QuestionController {
     public ResponseEntity<QuestionResponseDto> getQuestion(@PathVariable Long questionId) {
         Question question = questionService.findQuestion(questionId);
         QuestionResponseDto response = toResponseDto(question);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Получает список всех вариантов ответа указанного вопроса.
+     * <p>
+     * Возвращает HTTP 200 со списком DTO вариантов или ошибку 404, если вопрос не найден.
+     * </p>
+     *
+     * @param questionId идентификатор вопроса
+     * @return HTTP 200 со списком DTO вариантов ответа
+     */
+    @GetMapping("/{questionId}/options")
+    public ResponseEntity<List<AnswerOptionResponseDto>> getOptionsByQuestion(
+            @PathVariable Long questionId) {
+        List<AnswerOption> options = answerOptionService.getOptionsByQuestion(questionId);
+        List<AnswerOptionResponseDto> response = options.stream()
+                .map(this::toOptionResponseDto)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(response);
     }
 
@@ -159,53 +166,6 @@ public class QuestionController {
         AnswerOption option = answerOptionService.createAnswerOption(questionId, dto.getText(), dto.getIsCorrect());
         AnswerOptionResponseDto response = toOptionResponseDto(option);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    /**
-     * Получает вариант ответа по идентификатору.
-     * <p>
-     * Возвращает DTO с данными варианта или ошибку 404, если вариант не найден.
-     * </p>
-     *
-     * @param optionId идентификатор варианта ответа
-     * @return HTTP 200 с DTO варианта
-     */
-    @GetMapping("/{optionId}/options")
-    public ResponseEntity<AnswerOptionResponseDto> getAnswerOption(@PathVariable Long optionId) {
-        AnswerOption option = answerOptionService.findAnswerOption(optionId);
-        AnswerOptionResponseDto response = toOptionResponseDto(option);
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Обновляет данные существующего варианта ответа.
-     * <p>
-     * Принимает DTO с текстом и признаком правильности варианта.
-     * </p>
-     *
-     * @param optionId идентификатор варианта
-     * @param dto      данные для обновления
-     * @return HTTP 200 с обновлённым DTO варианта
-     */
-    @PutMapping("/{optionId}/options")
-    public ResponseEntity<AnswerOptionResponseDto> updateAnswerOption(
-            @PathVariable Long optionId,
-            @Valid @RequestBody AnswerOptionRequestDto dto) {
-        AnswerOption option = answerOptionService.updateAnswerOption(optionId, dto.getText(), dto.getIsCorrect());
-        AnswerOptionResponseDto response = toOptionResponseDto(option);
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Удаляет вариант ответа по идентификатору.
-     *
-     * @param optionId идентификатор варианта для удаления
-     * @return HTTP 204 No Content при успешном удалении
-     */
-    @DeleteMapping("/{optionId}/options")
-    public ResponseEntity<Void> deleteAnswerOption(@PathVariable Long optionId) {
-        answerOptionService.deleteAnswerOption(optionId);
-        return ResponseEntity.noContent().build();
     }
 
     /**

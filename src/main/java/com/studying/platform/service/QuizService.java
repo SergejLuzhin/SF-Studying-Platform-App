@@ -204,7 +204,8 @@ public class QuizService {
     /**
      * Создаёт вопрос в указанной викторине.
      * <p>
-     * Проверяет существование викторины и сохраняет новый вопрос.
+     * Проверяет существование викторины, поддерживает двунаправленную связь
+     * между викториной и вопросом, сохраняет новый вопрос.
      * </p>
      *
      * @param quizId идентификатор викторины
@@ -217,6 +218,9 @@ public class QuizService {
         Quiz quiz = findQuiz(quizId);
 
         Question question = new Question(quiz, text, type);
+        // Поддержка двунаправленной связи: добавляем вопрос в коллекцию викторины
+        quiz.getQuestions().add(question);
+        question.setQuiz(quiz);
         entityManager.persist(question);
         entityManager.flush();
         return question;

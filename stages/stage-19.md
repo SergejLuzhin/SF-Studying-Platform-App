@@ -1,272 +1,427 @@
-# Этап 19. API тестов, отзывов и тегов — подробный план
+# Этап 19. API тестов, отзывов и тегов — подробный план (актуализация)
 
 ## Цель и границы этапа
 
-Реализовать REST API для управления тестами (Quiz), вопросами (Question) и вариантами ответов (AnswerOption), прохождения тестов (QuizSubmission), а также отзывов (CourseReview) и тегов (Tag).
+Исправить 3 отключённых `@Disabled` HTTP-теста в `QuizReviewTagControllerTest.java` и завершить этап 19:
+- `getOptionsByQuestion_shouldReturn200` — ожидается 2 варианта, возвращается 4 (или 404 из-за отсутствующего эндпоинта).
+- `getQuizSubmission_shouldReturn200` — POST `/api/quiz/{quizId}/submit` возвращает 400 («Тест не готов: нет вопросов»).
+- `deleteQuiz_hasSubmissions_shouldReturn400` — тот же сбой на `POST /api/quiz/{quizId}/submit`.
 
 **Границы:**
-- Не создаём сущности — все 15 сущностей уже существуют (этапы 12, 14).
-- Не меняем QuizSubmissionService и CourseReviewService — они уже реализованы.
-- Создаём QuizService (новый) для CRUD тестов, вопросов, вариантов.
-- Создаём DTO для всех новых контроллеров.
-- Создаём HTTP-тесты для всех эндпоинтов.
+- Не создаём новых сущностей, DTO или контроллеров.
+- Исправляем двунаправленные связи в сервисных методах `QuizService.createQuestion` и `AnswerOptionService.createAnswerOption`.
+- Добавляем недостающий GET-эндпоинт для вариантов ответа вопроса.
+- Модифицируем тесты для гарантии корректного состояния после создания сущностей.
+- Удаляем дублирование DELETE в `cleanUp()`.
 
-## АDR
+## ADR
 
-ADR нет. Индекс `docs/adr/README.md` пуст — новых архитектурных решений не требуется.
+ADR не требуется. Индекс `docs/adr/README.md` пуст — изменения касаются только двунаправленных связей и тестов.
 
 ## Связанные файлы
 
-### Сущности (существуют, читать не нужно):
-- `Quiz`, `Question`, `AnswerOption`, `QuizSubmission`, `CourseReview`, `Tag`, `Module`, `Course`, `User`
+### Исходные файлы (изменение):
 
-### Сервисы (существуют):
-- `QuizSubmissionService` — `startQuiz(Long quizId)`, `submitAnswers(Long quizId, Long studentId, Map<Long,Set<Long>> answers)`
-- `CourseReviewService` — `createReview(Long studentId, Long courseId, Integer rating, String comment)`, `getReviewsByCourse(Long courseId)`, `getReviewsByStudent(Long studentId)`
-- `QuizSubmissionService` — **нужно добавить** `findQuizSubmissionById(Long id)` (если нет)
+1. **`src/main/java/com/studying/platform/service/QuizService.java`** — метод `createQuestion(Long quizId, ...)` — добавить поддержку двунаправленной связи (`quiz.getQuestions().add(question)`).
+2. **`src/main/java/com/studying/platform/service/AnswerOptionService.java`** — метод `createAnswerOption(Long questionId, ...)` — добавить поддержку двунаправленной связи (`question.getOptions().add(option)`).
+3. **`src/main/java/com/studying/platform/controller/QuestionController.java`** — добавить `@GetMapping("/{questionId}/options")` для возврата списка вариантов ответа.
+4. **`src/main/java/com/studying/platform/service/QuizSubmissionService.java`** — метод `startQuiz` — после `JOIN FETCH` пересобрать bidirectional relationship (загрузка вопросов и вариантов с явным добавлением в родительские коллекции).
 
-### Репозитории (существуют):
-- `QuizRepository`, `QuestionRepository`, `AnswerOptionRepository`, `QuizSubmissionRepository`, `CourseReviewRepository`, `TagRepository`, `ModuleRepository`, `UserRepository`
+### Тестовые файлы (изменение):
 
-### Контроллеры (существуют):
-- `UserController`, `CategoryController`, `CourseController`, `EnrollmentController`, `ModuleController`, `LessonController`, `AssignmentController`, `SubmissionController`
+5. **`src/test/java/com/studying/platform/controller/QuizReviewTagControllerTest.java`** — исправить 3 `@Disabled`-теста и `cleanUp()`.
 
-## Порядок реализации
+### Сущности (чтение, без изменений):
 
-Порядок: **DTO → Service → Controller → Tests**
+- `Quiz` — `@OneToMany(mappedBy = "quiz", fetch = LAZY) Set<Question> questions`
+- `Question` — `@ManyToOne Quiz quiz`, `@OneToMany(mappedBy = "question", fetch = LAZY) Set<AnswerOption> options`
+- `AnswerOption` — `@ManyToOne Question question`
 
-### Шаг 1. DTO-классы
+## Порядок действий
 
-Создать в `src/main/java/com/studying/platform/dto/`:
+### Действие 1. Добавить недостающий GET-эндпоинт вариантов ответа
 
-#### 1.1 `QuizRequestDto` — создание/обновление викторины
-- Поля: `moduleId` (Long), `title` (String, @NotBlank, @Size(max=200)), `timeLimit` (Integer, nullable)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+**Файл:** `QuestionController.java`
 
-#### 1.2 `QuizResponseDto` — ответ с данными викторины
-- Поля: `id` (Long), `moduleId` (Long), `title` (String), `timeLimit` (Integer), `questionCount` (Integer — из quiz.getQuestions().size())
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+Добавить метод в `QuestionController`:
 
-#### 1.3 `QuestionRequestDto` — создание/обновление вопроса
-- Поля: `text` (String, @NotBlank, columnDefinition=TEXT), `type` (QuizQuestionType)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+```java
+/**
+ * Получает список всех вариантов ответа указанного вопроса.
+ * <p>
+ * Возвращает HTTP 200 со списком DTO вариантов или ошибку 404, если вопрос не найден.
+ * </p>
+ *
+ * @param questionId идентификатор вопроса
+ * @return HTTP 200 со списком DTO вариантов ответа
+ */
+@GetMapping("/{questionId}/options")
+public ResponseEntity<List<AnswerOptionResponseDto>> getOptionsByQuestion(
+        @PathVariable Long questionId) {
+    List<AnswerOption> options = answerOptionService.getOptionsByQuestion(questionId);
+    List<AnswerOptionResponseDto> response = options.stream()
+            .map(this::toOptionResponseDto)
+            .collect(Collectors.toList());
+    return ResponseEntity.ok(response);
+}
+```
 
-#### 1.4 `QuestionResponseDto` — ответ с данными вопроса
-- Поля: `id` (Long), `quizId` (Long), `text` (String), `type` (QuizQuestionType), `optionCount` (Integer)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+**Файл:** `AnswerOptionService.java` — добавить метод:
 
-#### 1.5 `AnswerOptionRequestDto` — создание/обновление варианта ответа
-- Поля: `text` (String, @NotBlank, columnDefinition=TEXT), `isCorrect` (Boolean)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+```java
+/**
+ * Возвращает список всех вариантов ответа указанного вопроса.
+ * <p>
+ * Проверяет существование вопроса. Если вопрос не найден —
+ * выбрасывает {@link ResourceNotFoundException}.
+ * </p>
+ *
+ * @param questionId идентификатор вопроса
+ * @return список вариантов ответа
+ * @throws ResourceNotFoundException если вопрос не найден
+ */
+@Transactional(readOnly = true)
+public List<AnswerOption> getOptionsByQuestion(Long questionId) {
+    if (!questionRepository.existsById(questionId)) {
+        throw new ResourceNotFoundException(
+                "Вопрос с идентификатором " + questionId + " не найден");
+    }
+    return answerOptionRepository.findByQuestionId(questionId);
+}
+```
 
-#### 1.6 `AnswerOptionResponseDto` — ответ с данными варианта
-- Поля: `id` (Long), `questionId` (Long), `text` (String), `isCorrect` (Boolean)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+**Обоснование:** Тест `getOptionsByQuestion_shouldReturn200` вызывает `GET /api/question/{questionId}/options`. В текущем `QuestionController` нет такого эндпоинта (есть только `GET /api/question/{questionId}` и `GET /api/question/{optionId}/options`). Без эндпоинта тест получает 404.
 
-#### 1.7 `SubmitAnswersRequestDto` — тело POST /api/quiz/{quizId}/submit
-- Поля: `studentId` (Long), `answers` (Map<Long, Set<Long>> — вопрос → варианты)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+---
 
-#### 1.8 `QuizSubmissionResponseDto` — ответ с результатом теста
-- Поля: `id` (Long), `quizId` (Long), `studentId` (Long), `score` (Integer), `takenAt` (LocalDateTime)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+### Действие 2. Исправить двунаправленные связи в сервисах
 
-#### 1.9 `StartQuizResponseDto` — ответ GET /api/quiz/{quizId}/start
-- Поля: `id` (Long), `moduleId` (Long), `title` (String), `timeLimit` (Integer), `questions` (List<QuestionWithOptionsDto>)
-- Вложенный класс `QuestionWithOptionsDto`: `id`, `text`, `type`, `options` (List<AnswerOptionDto>)
-- Вложенный класс `AnswerOptionDto`: `id`, `text`, `isCorrect`
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+#### 2.1 `QuizService.createQuestion`
 
-#### 1.10 `CourseReviewRequestDto` — создание отзыва
-- Поля: `studentId` (Long), `courseId` (Long), `rating` (Integer, @Min(1), @Max(5)), `comment` (String, nullable)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+**Файл:** `QuizService.java` — метод `createQuestion(Long quizId, String text, QuizQuestionType type)`:
 
-#### 1.11 `CourseReviewResponseDto` — ответ с отзывом
-- Поля: `id` (Long), `studentId` (Long), `courseId` (Long), `rating` (Integer), `comment` (String), `createdAt` (LocalDateTime)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+Текущий код:
+```java
+public Question createQuestion(Long quizId, String text, QuizQuestionType type) {
+    Quiz quiz = findQuiz(quizId);
 
-#### 1.12 `TagRequestDto` — создание тега
-- Поля: `name` (String, @NotBlank, @Size(max=50))
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+    Question question = new Question(quiz, text, type);
+    entityManager.persist(question);
+    entityManager.flush();
+    return question;
+}
+```
 
-#### 1.13 `TagResponseDto` — ответ с тегом
-- Поля: `id` (Long), `name` (String)
-- Конструкторы: публичный по умолчанию + конструктор со всеми параметрами
-- Геттеры/сеттеры
+Исправленный код:
+```java
+public Question createQuestion(Long quizId, String text, QuizQuestionType type) {
+    Quiz quiz = findQuiz(quizId);
 
-### Шаг 2. Сервисы
+    Question question = new Question(quiz, text, type);
+    // Поддержка двунаправленной связи
+    quiz.getQuestions().add(question);
+    question.setQuiz(quiz);
+    entityManager.persist(question);
+    entityManager.flush();
+    return question;
+}
+```
 
-#### 2.1 `QuizService` — CRUD для тестов, вопросов, вариантов
+**Обоснование:** Без добавления вопроса в `quiz.getQuestions()` коллекция вопросов викторины остаётся пустой в памяти. При использовании `JOIN FETCH` в `startQuiz` / `submitAnswers` Hibernate загружает вопросы из БД и заполняет коллекцию. Но если тестовый `cleanUp()` удалил вопросы через JDBC (минуя JPA), то `JOIN FETCH` не найдёт их, и `quiz.getQuestions()` окажется пустым. Поддержание двунаправленной связи гарантирует, что `quiz.getQuestions()` содержит все вопросы, сохранённые через `QuizService`.
 
-Новый файл: `src/main/java/com/studying/platform/service/QuizService.java`
+#### 2.2 `AnswerOptionService.createAnswerOption`
 
-Методы:
-1. `Quiz createQuiz(Long moduleId, String title, Integer timeLimit)` — создаёт викторину в указанном модуле. Проверяет существование модуля, отсутствие теста в модуле.
-2. `Quiz findQuiz(Long quizId)` — находит викторину по ID.
-3. `Quiz updateQuiz(Long quizId, String title, Integer timeLimit)` — обновляет название и лимит времени.
-4. `void deleteQuiz(Long quizId)` — удаляет викторину. Проверяет отсутствие результатов (QuizSubmission) — если есть, выбрасывает `IllegalStateException`.
-5. `Question createQuestion(Long quizId, String text, QuizQuestionType type)` — добавляет вопрос к викторине.
-6. `Question findQuestion(Long questionId)` — находит вопрос по ID.
-7. `Question updateQuestion(Long questionId, String text, QuizQuestionType type)` — обновляет вопрос.
-8. `void deleteQuestion(Long questionId)` — удаляет вопрос.
-9. `AnswerOption createAnswerOption(Long questionId, String text, Boolean isCorrect)` — добавляет вариант ответа.
-10. `AnswerOption findAnswerOption(Long answerOptionId)` — находит вариант по ID.
-11. `AnswerOption updateAnswerOption(Long answerOptionId, String text, Boolean isCorrect)` — обновляет вариант.
-12. `void deleteAnswerOption(Long answerOptionId)` — удаляет вариант.
-13. `List<Question> getQuestionsByQuiz(Long quizId)` — список вопросов викторины.
-14. `List<AnswerOption> getOptionsByQuestion(Long questionId)` — список вариантов вопроса.
+**Файл:** `AnswerOptionService.java` — метод `createAnswerOption`:
 
-Внедрение: QuizRepository, QuestionRepository, AnswerOptionRepository, ModuleRepository, QuizSubmissionRepository, EntityManager.
+Текущий код:
+```java
+public AnswerOption createAnswerOption(Long questionId, String text, Boolean isCorrect) {
+    Question question = questionRepository.findById(questionId)
+            .orElseThrow(...);
 
-#### 2.2 Обновление `QuizSubmissionService`
+    AnswerOption option = new AnswerOption(question, text, isCorrect);
+    entityManager.persist(option);
+    entityManager.flush();
+    return option;
+}
+```
 
-Добавить метод (если нет):
+Исправленный код:
+```java
+public AnswerOption createAnswerOption(Long questionId, String text, Boolean isCorrect) {
+    Question question = questionRepository.findById(questionId)
+            .orElseThrow(...);
+
+    AnswerOption option = new AnswerOption(question, text, isCorrect);
+    // Поддержка двунаправленной связи
+    question.getOptions().add(option);
+    option.setQuestion(question);
+    entityManager.persist(option);
+    entityManager.flush();
+    return option;
+}
+```
+
+**Обоснование:** Аналогично — без добавления варианта в `question.getOptions()` коллекция вариантов остаётся пустой. При `JOIN FETCH` в `startQuiz` и `submitAnswers` Hibernate подгружает варианты из БД, но поддержание связи на уровне Java-объектов гарантирует консистентность.
+
+#### 2.3 `QuizSubmissionService.startQuiz` — пересборка bidirectional relationship
+
+**Файл:** `QuizSubmissionService.java` — метод `startQuiz`:
+
+Текущий код:
 ```java
 @Transactional(readOnly = true)
-public QuizSubmission findQuizSubmissionById(Long id)
+public Quiz startQuiz(Long quizId) {
+    Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
+            .orElseThrow(...);
+
+    if (quiz.getQuestions().isEmpty()) {
+        throw new IllegalStateException("Тест не готов к прохождению: нет вопросов");
+    }
+
+    return quiz;
+}
 ```
-Проверяет существование и возвращает сущность или `ResourceNotFoundException`.
 
-### Шаг 3. Контроллеры
+Исправленный код:
+```java
+@Transactional(readOnly = true)
+public Quiz startQuiz(Long quizId) {
+    Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
+            .orElseThrow(...);
 
-#### 3.1 `QuizController`
-Путь: `@RequestMapping("/api/quiz")`
+    // Пересборка двунаправленной связи после JOIN FETCH
+    Set<Question> loadedQuestions = new HashSet<>(quiz.getQuestions());
+    quiz.getQuestions().clear();
+    for (Question q : loadedQuestions) {
+        quiz.getQuestions().add(q);
+    }
 
-| Метод | URL | Код | Описание |
-|-------|-----|-----|----------|
-| POST | `/api/quiz` | 201 | Создание викторины (QuizRequestDto) |
-| GET | `/api/quiz/{quizId}` | 200 | Получение викторины |
-| PUT | `/api/quiz/{quizId}` | 200 | Обновление викторины |
-| DELETE | `/api/quiz/{quizId}` | 204 | Удаление викторины |
-| GET | `/api/quiz/{quizId}/questions` | 200 | Список вопросов викторины |
-| GET | `/api/quiz/{quizId}/start` | 200 | Получение теста для прохождения (QuizSubmissionService.startQuiz) |
-| POST | `/api/quiz/{quizId}/submit` | 201 | Отправка ответов (QuizSubmissionService.submitAnswers) |
+    if (quiz.getQuestions().isEmpty()) {
+        throw new IllegalStateException("Тест не готов к прохождению: нет вопросов");
+    }
 
-#### 3.2 `QuestionController`
-Путь: `@RequestMapping("/api/question")`
+    return quiz;
+}
+```
 
-| Метод | URL | Код | Описание |
-|-------|-----|-----|----------|
-| GET | `/api/question/{questionId}` | 200 | Получение вопроса |
-| PUT | `/api/question/{questionId}` | 200 | Обновление вопроса |
-| DELETE | `/api/question/{questionId}` | 204 | Удаление вопроса |
+**Обоснование:** `JOIN FETCH` загружает вопросы и варианты из БД, но Hibernate не всегда автоматически заполняет родительскую коллекцию в bidirectional relationship. Пересборка гарантирует, что `quiz.getQuestions()` не будет пустым при корректных данных в БД.
 
-#### 3.3 `AnswerOptionController`
-Путь: `@RequestMapping("/api/option")`
+---
 
-| Метод | URL | Код | Описание |
-|-------|-----|-----|----------|
-| GET | `/api/option/{optionId}` | 200 | Получение варианта ответа |
-| PUT | `/api/option/{optionId}` | 200 | Обновление варианта |
-| DELETE | `/api/option/{optionId}` | 204 | Удаление варианта |
+### Действие 3. Исправить 3 отключённых теста
 
-#### 3.4 `QuizSubmissionController`
-Путь: `@RequestMapping("/api/submissions/quiz")`
+#### 3.1 `getOptionsByQuestion_shouldReturn200`
 
-| Метод | URL | Код | Описание |
-|-------|-----|-----|----------|
-| GET | `/api/submissions/quiz/{submissionId}` | 200 | Получение результата теста |
-| GET | `/api/submissions/quiz/student/{studentId}` | 200 | Список результатов студента |
-| GET | `/api/submissions/quiz/quiz/{quizId}` | 200 | Список результатов по викторине |
+**Проблема:** Ожидается 2 варианта, возвращается 4 (или 404 из-за отсутствующего эндпоинта).
 
-#### 3.5 `CourseReviewController`
-Путь: `@RequestMapping("/api/course-reviews")`
+**Решение:**
+1. Добавить эндпоинт (Действие 1).
+2. После создания вопросов и вариантов — перезагрузить вопрос через `entityManager.find(Question.class, questionId)`, чтобы убедиться, что двунаправленная связь установлена корректно.
+3. Добавить прямое SQL-утверждение для проверки количества вариантов в БД (как запасной вариант).
 
-| Метод | URL | Код | Описание |
-|-------|-----|-----|----------|
-| POST | `/api/course-reviews` | 201 | Создание отзыва (использует CourseReviewService) |
-| GET | `/api/course-reviews/course/{courseId}` | 200 | Список отзывов курса (CourseReviewService) |
-| GET | `/api/course-reviews/student/{studentId}` | 200 | Список отзывов студента (CourseReviewService) |
+**Обновлённая реализация теста (фрагмент):**
+```java
+@Test
+void getOptionsByQuestion_shouldReturn200() throws Exception {
+    // ... (создание teacher, category, course, module, quiz) ...
+    // ... (создание вопроса) ...
 
-#### 3.6 `TagController`
-Путь: `@RequestMapping("/api/tags")`
+    // Создаём 2 варианта
+    AnswerOptionRequestDto optDto1 = new AnswerOptionRequestDto("Ответ А", false);
+    mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(optDto1)))
+            .andExpect(status().isCreated());
 
-| Метод | URL | Код | Описание |
-|-------|-----|-----|----------|
-| GET | `/api/tags` | 200 | Список всех тегов |
-| POST | `/api/tags` | 201 | Создание тега (TagRequestDto) |
-| GET | `/api/tags/{tagId}` | 200 | Получение тега по ID |
-| PUT | `/api/tags/{tagId}` | 200 | Обновление тега |
-| DELETE | `/api/tags/{tagId}` | 204 | Удаление тега |
+    AnswerOptionRequestDto optDto2 = new AnswerOptionRequestDto("Ответ Б", true);
+    mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(optDto2)))
+            .andExpect(status().isCreated());
 
-### Шаг 4. HTTP-тесты
+    // Перезагрузка вопроса из БД для проверки bidirectional связи
+    Question reloadedQuestion = entityManager.find(Question.class, question.getId());
+    assertNotNull(reloadedQuestion);
+    assertEquals(2, reloadedQuestion.getOptions().size(),
+            "Вопрос должен содержать ровно 2 варианта ответа");
 
-Новый тестовый файл: `src/test/java/com/studying/platform/controller/QuizReviewTagControllerTest.java`
+    // Прямая SQL-проверка
+    Integer optionCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM answeroption WHERE question_id = ?",
+            Integer.class, question.getId());
+    assertEquals(2, optionCount, "В БД должно быть 2 варианта для этого вопроса");
 
-Паттерн очистки `@AfterEach` — дополнить существующий `cleanUp()` удалением данных из таблиц: `quizsubmission`, `quiz`, `question`, `answeroption`, `course_reviews`, `tags`, `course_tag`.
+    // HTTP-тест эндпоинта
+    mockMvc.perform(get("/api/question/" + question.getId() + "/options"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2));
+}
+```
 
-#### 4.1 Позитивные сценарии
+#### 3.2 `getQuizSubmission_shouldReturn200`
 
-1. **`createQuiz_shouldReturn201`** — создать викторину через POST /api/quiz → 201, проверить поля response.
-2. **`getQuiz_shouldReturn200`** — GET /api/quiz/{id} → 200, проверить title, timeLimit, questionCount.
-3. **`updateQuiz_shouldReturn200`** — PUT /api/quiz/{id} → 200, проверить обновлённое title.
-4. **`deleteQuiz_shouldReturn204`** — DELETE /api/quiz/{id} → 204 (после удаления всех вопросов).
-5. **`createQuestion_shouldReturn201`** — POST /api/quiz/{id}/questions → 201, проверить text, type.
-6. **`getQuestionsByQuiz_shouldReturn200`** — GET /api/quiz/{id}/questions → 200, проверить размер списка.
-7. **`createAnswerOption_shouldReturn201`** — POST /api/question/{id}/options → 201, проверить text, isCorrect.
-8. **`getOptionsByQuestion_shouldReturn200`** — GET /api/question/{id}/options → 200, проверить размер.
-9. **`startQuiz_shouldReturn200_withQuestions`** — GET /api/quiz/{id}/start → 200, проверить вложенные вопросы с вариантами.
-10. **`submitAnswers_shouldReturn201`** — POST /api/quiz/{id}/submit → 201, проверить score.
-11. **`getQuizSubmission_shouldReturn200`** — GET /api/submissions/quiz/{id} → 200.
-12. **`getSubmissionsByStudent_shouldReturn200`** — GET /api/submissions/quiz/student/{studentId} → 200.
-13. **`createReview_shouldReturn201`** — POST /api/course-reviews → 201, проверить rating, comment.
-14. **`getReviewsByCourse_shouldReturn200`** — GET /api/course-reviews/course/{courseId} → 200, проверить размер.
-15. **`createTag_shouldReturn201`** — POST /api/tags → 201, проверить name.
-16. **`getTags_shouldReturn200`** — GET /api/tags → 200, проверить размер списка.
-17. **`getTag_shouldReturn200`** — GET /api/tags/{id} → 200, проверить name.
-18. **`updateTag_shouldReturn200`** — PUT /api/tags/{id} → 200, проверить обновлённое name.
-19. **`deleteTag_shouldReturn204`** — DELETE /api/tags/{id} → 204.
+**Проблема:** POST `/api/quiz/{quizId}/submit` возвращает 400 («Тест не готов: нет вопросов»).
 
-#### 4.2 Негативные сценарии
+**Решение:**
+1. Исправить двунаправленные связи (Действие 2.1, 2.2) — это гарантирует, что `quiz.getQuestions()` не пуст после создания вопроса и вариантов.
+2. После создания вопроса и варианта — перезагрузить викторину через `entityManager.find(Quiz.class, quizId)` и убедиться, что вопросы загружены.
+3. Убрать `@Disabled`.
 
-20. **`createQuiz_nonExistentModule_shouldReturn404`** — указать несуществующий moduleId → 404.
-21. **`createQuiz_duplicateModule_shouldReturn400`** — создать второй тест для того же модуля → 400 (IllegalStateException).
-22. **`createQuiz_emptyTitle_shouldReturn400`** — пустой title → 400 (MethodArgumentNotValidException).
-23. **`deleteQuiz_hasSubmissions_shouldReturn400`** — удалить викторину с результатами → 400 (IllegalStateException).
-24. **`startQuiz_nonExistent_shouldReturn404`** — GET /api/quiz/99999/start → 404.
-25. **`submitAnswers_nonExistentQuiz_shouldReturn404`** — POST /api/quiz/99999/submit → 404.
-26. **`submitAnswers_notEnrolled_shouldReturn404`** — студент не записан на курс теста → 404.
-27. **`submitAnswers_wrongStudent_shouldReturn404`** — чужой studentId → 404.
-28. **`submitAnswers_emptyAnswers_shouldReturn201_partialScore`** — пустая карта ответов → результат с нулевым баллом (не ошибка, частичный результат).
-29. **`submitAnswers_foreignQuestionIgnored`** — в ответах ID несуществующего вопроса → игнорируется, балл считается по реальным вопросам.
-30. **`createReview_nonExistentCourse_shouldReturn404`** — создать отзыв для несуществующего курса → 404.
-31. **`createReview_ratingOutOfRange_shouldReturn400`** — rating = 0 или 6 → 400.
-32. **`createReview_duplicate_shouldReturn400`** — студент уже оставил отзыв на курс → 400 (IllegalStateException).
-33. **`createReview_byNonStudent_shouldReturn404`** — студент не найден / не является STUDENT → 404.
-34. **`createReview_notEnrolled_shouldReturn404`** — нет активной записи на курс → 404.
-35. **`createTag_duplicateName_shouldReturn400`** — создать тег с существующим name → 400 (UniqueConstraint).
-36. **`deleteQuiz_nonExistent_shouldReturn404`** — удалить несуществующую викторину → 404.
-37. **`startQuiz_emptyQuiz_shouldReturn400`** — тест без вопросов → 400 (IllegalStateException).
+**Обновлённая реализация теста (фрагмент):**
+```java
+@Test
+void getQuizSubmission_shouldReturn200() throws Exception {
+    // ... (создание teacher, category, course, module) ...
+    // ... (создание викторины) ...
 
-#### 4.3 Проверка формата ошибок
+    // Создание вопроса
+    QuestionRequestDto qDto = new QuestionRequestDto("Вопрос?", QuizQuestionType.SINGLE_CHOICE);
+    MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(qDto)))
+            .andExpect(status().isCreated())
+            .andReturn();
 
-38. **`errorResponseFormat_shouldMatchErrorResponseDto`** — поймать любой 400/404 и проверить поля: `status`, `error`, `message`, `path`, `timestamp`.
+    QuestionResponseDto question = objectMapper.readValue(
+            qResult.getResponse().getContentAsString(), QuestionResponseDto.class);
+    createdQuestionIds.add(question.getId());
+
+    // Создание варианта
+    AnswerOptionRequestDto optDto =
+            new AnswerOptionRequestDto("Ответ", false);
+    MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(optDto)))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    AnswerOptionResponseDto option = objectMapper.readValue(
+            optResult.getResponse().getContentAsString(), AnswerOptionResponseDto.class);
+    createdOptionIds.add(option.getId());
+
+    // Перезагрузка викторины для проверки bidirectional связи
+    Quiz reloadedQuiz = entityManager.find(Quiz.class, quiz.getId());
+    assertNotNull(reloadedQuiz);
+    assertFalse(reloadedQuiz.getQuestions().isEmpty(),
+            "Викторина должна содержать вопросы после создания");
+
+    Long studentId = createUser("student-sub-get-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
+    enrollStudent(studentId, courseId);
+
+    SubmitAnswersRequestDto submitDto = new SubmitAnswersRequestDto(
+            studentId, Map.of(question.getId(), Set.of(option.getId())));
+
+    MvcResult result = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/submit")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(submitDto)))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    QuizSubmissionResponseDto submission = objectMapper.readValue(
+            result.getResponse().getContentAsString(), QuizSubmissionResponseDto.class);
+    createdSubmissionIds.add(submission.getId());
+
+    mockMvc.perform(get("/api/submissions/quiz/" + submission.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.quizId").value(quiz.getId()))
+            .andExpect(jsonPath("$.studentId").value(studentId))
+            .andExpect(jsonPath("$.score").value(0));
+}
+```
+
+#### 3.3 `deleteQuiz_hasSubmissions_shouldReturn400`
+
+**Проблема:** Тот же сбой на POST `/api/quiz/{quizId}/submit`.
+
+**Решение:** Аналогично п. 3.2 — исправить bidirectional связи, перезагрузить викторину после создания вопроса/варианта, убрать `@Disabled`.
+
+**Обновлённая реализация теста (фрагмент):**
+```java
+@Test
+void deleteQuiz_hasSubmissions_shouldReturn400() throws Exception {
+    // ... (создание teacher, category, course, module) ...
+    // ... (создание викторины) ...
+
+    // Создание вопроса
+    QuestionRequestDto qDto = new QuestionRequestDto("Вопрос?", QuizQuestionType.SINGLE_CHOICE);
+    MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(qDto)))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    QuestionResponseDto question = objectMapper.readValue(
+            qResult.getResponse().getContentAsString(), QuestionResponseDto.class);
+    createdQuestionIds.add(question.getId());
+
+    // Создание варианта
+    AnswerOptionRequestDto optDto =
+            new AnswerOptionRequestDto("Ответ", false);
+    MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(optDto)))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    AnswerOptionResponseDto option = objectMapper.readValue(
+            optResult.getResponse().getContentAsString(), AnswerOptionResponseDto.class);
+    createdOptionIds.add(option.getId());
+
+    // Перезагрузка викторины для проверки bidirectional связи
+    Quiz reloadedQuiz = entityManager.find(Quiz.class, quiz.getId());
+    assertNotNull(reloadedQuiz);
+    assertFalse(reloadedQuiz.getQuestions().isEmpty(),
+            "Викторина должна содержать вопросы после создания");
+
+    Long studentId = createUser("student-delsub-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
+    enrollStudent(studentId, courseId);
+
+    SubmitAnswersRequestDto submitDto = new SubmitAnswersRequestDto(
+            studentId, Map.of(question.getId(), Set.of(option.getId())));
+    mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/submit")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(submitDto)))
+            .andExpect(status().isCreated());
+
+    mockMvc.perform(delete("/api/quiz/" + quiz.getId()))
+            .andExpect(status().isBadRequest());
+}
+```
+
+---
+
+### Действие 4. Очистка `cleanUp()`
+
+**Файл:** `QuizReviewTagControllerTest.java`
+
+Удалить дублирование `DELETE FROM modules` (строки 129 и 135). Оставить единственную очистку после удаления quiz.
+
+Также удалить дублирующую строку `jdbcTemplate.update("delete from modules");` перед `jdbcTemplate.update("delete from enrollments");`.
+
+---
+
+### Действие 5. Удалить `@Disabled` и комментарии TODO
+
+Удалить аннотации `@Disabled` и комментарии "Временное отключение" из трёх тестов:
+- `getOptionsByQuestion_shouldReturn200` (строка ~528)
+- `getQuizSubmission_shouldReturn200` (строка ~690)
+- `deleteQuiz_hasSubmissions_shouldReturn400` (строка ~988)
+
+---
 
 ## Критерии приёмки
 
-1. Все DTO созданы с публичным конструктором по умолчанию + конструктором со всеми параметрами, геттерами/сеттерами.
-2. `QuizService` реализует CRUD для Quiz, Question, AnswerOption с полной проверкой сущностей и бизнес-правил.
-3. Все 6 контроллеров работают и возвращают корректные HTTP-коды (201, 200, 204, 400, 404).
-4. `QuizSubmissionService.startQuiz()` возвращает Quiz с загруженными вопросами и вариантами.
-5. `QuizSubmissionService.submitAnswers()` вычисляет балл, игнорирует чужие ID вопросов, сохраняет результат.
-6. `CourseReviewService` инкапсулирует бизнес-логику (проверка записи, уникальность отзыва, диапазон рейтинга).
-7. Тег с уникальным названием не может быть создан дважды.
-8. Все 38+ HTTP-тестов (позитивные + негативные + проверка формата ошибок) проходят.
-9. Очистка данных в `@AfterEach` включает таблицы викторин, вопросов, вариантов, результатов, отзывов и тегов.
-10. JavaDoc на русском для всех классов, методов, конструкторов, интерфейсов.
-11. Английские идентификаторы, русская документация.
+1. **Двунаправленные связи поддерживаются:** `QuizService.createQuestion` добавляет вопрос в `quiz.getQuestions()`, `AnswerOptionService.createAnswerOption` добавляет вариант в `question.getOptions()`.
+2. **Эндпоинт `GET /api/question/{questionId}/options`** возвращает список вариантов ответа с HTTP 200.
+3. **`startQuiz` пересобирает bidirectional связь** после `JOIN FETCH`.
+4. **Все 3 отключённых теста проходят** с `PASS`:
+   - `getOptionsByQuestion_shouldReturn200` — возвращает 200 с массивом из 2 вариантов.
+   - `getQuizSubmission_shouldReturn200` — POST submit → 201, GET submission → 200.
+   - `deleteQuiz_hasSubmissions_shouldReturn400` — POST submit → 201, DELETE quiz → 400.
+5. **Общий `mvn test` — 0 ошибок, 0 пропусков.**
+6. **`cleanUp()` без дублирования.**
+7. **JavaDoc на русском** для всех изменённых/добавленных методов.
 
 ## Команды проверки
 
@@ -274,35 +429,45 @@ public QuizSubmission findQuizSubmissionById(Long id)
 # Компиляция проекта
 mvn compile
 
-# Запуск всех тестов (включая новые)
+# Запуск всех тестов (включая исправленные)
 mvn test
 
 # Проверка формата без проблем
 git diff --check
 ```
 
-## Ограничения и риски
+## Ограничения, риски и блокеры
 
 ### Риски
-1. **Очистка таблиц в @AfterEach** — порядок удаления важен: quizsubmission → quiz → question → answeroption → course_reviews → course_tag → tags.
-2. **Вложенные DTO (StartQuizResponseDto)** — требуют вложенных статических классов; убедиться в сериализации JSON через Jackson.
-3. **QuizSubmissionService.submitAnswers** — бизнес-логика уже реализована, контроллер просто передаёт Map<Long, Set<Long>> из тела запроса; Jackson корректно десериализует Set из JSON-массива.
+
+1. **Порядок выполнения тестов JUnit 5:** JUnit 5 не гарантирует порядок выполнения `@Test` методов. Если тесты выполняются в непредсказуемом порядке, данные от предыдущего теста могут повлиять на следующий. Решение: каждый тест создаёт полные данные через API, `cleanUp()` полностью удаляет все данные после каждого теста.
+2. **`EntityManager` между транзакциями:** `@BeforeEach entityManager.clear()` сбрасывает L1-кэш, но если `@Transactional` отсутствует на уровне класса, каждая API-транзакция изолирована. Двунаправленные связи решают проблему консистентности в пределах транзакции.
+3. **`JOIN FETCH` и bidirectional relationship:** Hibernate может не заполнять родительскую коллекцию при `JOIN FETCH`, если `@OneToMany` использует `mappedBy`. Пересборка в `startQuiz` гарантирует консистентность.
 
 ### Блокеры
-- Отсутствуют — все зависимости (сущности, сервисы, репозитории) уже реализованы.
+
+- Отсутствуют. Все зависимости (сущности, сервисы, репозитории) уже реализованы.
 - ADR не требуются.
 
 ### Ограничения
+
 - Тесты требуют запущенного Docker (Testcontainers PostgreSQL), как и все тесты проекта.
-- Нельзя проходить тест без активной записи на курс (проверяется в QuizSubmissionService).
-- У модуля не может быть более одного теста (проверяется в QuizService).
+- Исправление двунаправленных связей может повлиять на существующие сервисные вызовы — необходимо убедиться, что другие тесты не нарушаются (проверяется через `mvn test`).
 
-## Примечания и известные проблемы
+## Примечания
 
-### Отключённые тесты (@Disabled)
+### Корневая причина проблем
 
-Три HTTP-теста временно отключены через аннотацию `@Disabled` с комментариями TODO. Причина:
+После детального анализа исходного кода выявлены две корневые причины:
 
-1. **`getOptionsByQuestion_shouldReturn200`** — ожидается 2 варианта, возвращается 4. Причина: при запуске теста `startQuiz_shouldReturn200_withQuestions` метод `startQuiz()` загружает вопросы и варианты через `JOIN FETCH`-запрос EntityGraph. После `cleanUp` данные удаляются из БД, но Hibernate-кэш первого уровня (`EntityManager`) сохраняет загруженные сущности. Следующий тест получает варианты из кэша вместо свежих данных из БД. Решение: сброс кэша Hibernate через `entityManager.clear()` в `@BeforeEach`, однако это не полностью решает проблему из-за транзакционных границ между тестами. Требуется либо использование `@DirtiesContext`, либо переосмысление стратегии очистки.
+1. **Неподдерживаемые двунаправленные связи:** В `QuizService.createQuestion` и `AnswerOptionService.createAnswerOption` новые сущности (Question, AnswerOption) создаются и сохраняются через `EntityManager.persist()`, но **не добавляются в родительскую коллекцию** (`quiz.getQuestions()`, `question.getOptions()`). При использовании `JOIN FETCH` в `startQuiz` и `submitAnswers` Hibernate загружает вопросы/варианты из БД, но в некоторых сценариях (особенно после очистки `cleanUp()`) коллекция может оказаться пустой, что приводит к ошибке «Тест не готов: нет вопросов».
 
-2. **`getQuizSubmission_shouldReturn200`** и **`deleteQuiz_hasSubmissions_shouldReturn400`** — оба терпят на шаге создания submission (`POST /api/quiz/{quizId}/submit`), который возвращает 400 вместо ожидаемого 201. Метод `submitAnswers()` выбрасывает `IllegalStateException` («Тест не готов к прохождению: нет вопросов»). Вероятная причина: `submitAnswers()` загружает вопросы через `findByIdWithQuestions`, который может загрузить викторину с пустым списком вопросов из-за того, что предыдущий тест не корректно удалил вопросы (удаление через `entityManager.remove(quiz)` без cascade для вопросов оставляет вопросы в БД, но EntityGraph не загружает их в удалённую викторину). Требуется дополнительная отладка цепочки: создание вопроса → создание варианта → submission.
+2. **Отсутствующий GET-эндпоинт:** В `QuestionController` отсутствует `GET /api/question/{questionId}/options` для получения списка вариантов ответа вопроса. Тест `getOptionsByQuestion_shouldReturn200` вызывал несуществующий эндпоинт, что приводило к 404 или некорректному ответу.
+
+### Решение
+
+- Добавить поддержку bidirectional relationship во всех методах создания сущностей.
+- Пересобрать bidirectional relationship после `JOIN FETCH` в `startQuiz`.
+- Добавить недостающий GET-эндпоинт.
+- Добавить перезагрузку сущностей и SQL-утверждения в тесты для проверки корректности данных.
+- Удалить дублирование `DELETE FROM modules` в `cleanUp()`.

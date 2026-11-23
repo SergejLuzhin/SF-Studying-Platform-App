@@ -61,7 +61,8 @@ public class AnswerOptionService {
     /**
      * Создаёт вариант ответа для указанного вопроса.
      * <p>
-     * Проверяет существование вопроса и сохраняет новый вариант.
+     * Проверяет существование вопроса, поддерживает двунаправленную связь
+     * между вопросом и вариантом ответа, сохраняет новый вариант.
      * </p>
      *
      * @param questionId идентификатор вопроса
@@ -76,6 +77,9 @@ public class AnswerOptionService {
                         "Вопрос с идентификатором " + questionId + " не найден"));
 
         AnswerOption option = new AnswerOption(question, text, isCorrect);
+        // Поддержка двунаправленной связи: добавляем вариант в коллекцию вопроса
+        question.getOptions().add(option);
+        option.setQuestion(question);
         entityManager.persist(option);
         entityManager.flush();
         return option;
@@ -96,6 +100,26 @@ public class AnswerOptionService {
         return answerOptionRepository.findById(answerOptionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Вариант ответа с идентификатором " + answerOptionId + " не найден"));
+    }
+
+    /**
+     * Возвращает список всех вариантов ответа указанного вопроса.
+     * <p>
+     * Проверяет существование вопроса. Если вопрос не найден —
+     * выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param questionId идентификатор вопроса
+     * @return список вариантов ответа
+     * @throws ResourceNotFoundException если вопрос не найден
+     */
+    @Transactional(readOnly = true)
+    public List<AnswerOption> getOptionsByQuestion(Long questionId) {
+        if (!questionRepository.existsById(questionId)) {
+            throw new ResourceNotFoundException(
+                    "Вопрос с идентификатором " + questionId + " не найден");
+        }
+        return answerOptionRepository.findByQuestionId(questionId);
     }
 
     /**

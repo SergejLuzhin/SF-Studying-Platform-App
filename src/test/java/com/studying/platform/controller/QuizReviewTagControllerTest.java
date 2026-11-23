@@ -18,7 +18,6 @@ import com.studying.platform.entity.UserRole;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -132,7 +131,6 @@ class QuizReviewTagControllerTest {
             for (Long id : createdTagIds) {
                 jdbcTemplate.update("delete from tags where id = ?", id);
             }
-            jdbcTemplate.update("delete from modules");
             jdbcTemplate.update("delete from enrollments");
             for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
                 jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
@@ -525,7 +523,6 @@ class QuizReviewTagControllerTest {
      * Позитивный тест: получение вариантов ответа вопроса (HTTP 200).
      */
     @Test
-    @Disabled("Временное отключение: требует доработки интеграции submitAnswers и кэша Hibernate")
     void getOptionsByQuestion_shouldReturn200() throws Exception {
         Long teacherId = createUser("teacher-opts-" + System.currentTimeMillis() + "@test.io", UserRole.TEACHER);
         Long categoryId = createCategory("Категория для вариантов");
@@ -687,7 +684,6 @@ class QuizReviewTagControllerTest {
      * Позитивный тест: получение результата теста (HTTP 200).
      */
     @Test
-    @Disabled("Временное отключение: требует доработки интеграции submitAnswers")
     void getQuizSubmission_shouldReturn200() throws Exception {
         Long teacherId = createUser("teacher-sub-get-" + System.currentTimeMillis() + "@test.io", UserRole.TEACHER);
         Long categoryId = createCategory("Категория получения результатов");
@@ -719,7 +715,7 @@ class QuizReviewTagControllerTest {
         createdQuestionIds.add(question.getId());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto =
-                new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", false);
+                new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", true);
         MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto)))
@@ -753,7 +749,7 @@ class QuizReviewTagControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quizId").value(quiz.getId()))
                 .andExpect(jsonPath("$.studentId").value(studentId))
-                .andExpect(jsonPath("$.score").value(0));
+                .andExpect(jsonPath("$.score").value(100));
     }
 
     /**
@@ -985,7 +981,6 @@ class QuizReviewTagControllerTest {
      * Негативный тест: удаление викторины с результатами (HTTP 400).
      */
     @Test
-    @Disabled("Временное отключение: требует доработки интеграции submitAnswers")
     void deleteQuiz_hasSubmissions_shouldReturn400() throws Exception {
         Long teacherId = createUser("teacher-delsub-" + System.currentTimeMillis() + "@test.io", UserRole.TEACHER);
         Long categoryId = createCategory("Категория удаления с результатами");
@@ -1017,7 +1012,7 @@ class QuizReviewTagControllerTest {
         createdQuestionIds.add(question.getId());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto =
-                new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", false);
+                new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", true);
         MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto)))
