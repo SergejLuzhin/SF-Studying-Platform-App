@@ -6,6 +6,8 @@ import com.studying.platform.entity.Course;
 import com.studying.platform.entity.EnrollmentStatus;
 import com.studying.platform.entity.Lesson;
 import com.studying.platform.entity.Module;
+import com.studying.platform.entity.Quiz;
+import com.studying.platform.entity.Question;
 import com.studying.platform.entity.Tag;
 import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
@@ -548,9 +550,8 @@ public class CourseService {
      * выбрасывает {@link IllegalStateException} с понятным сообщением.
      * </p>
      * <p>
-     * Если проверка пройдена, курс удаляется вместе с модулями и уроками
-     * (благодаря каскадным операциям {@code REMOVE} и {@code orphanRemoval = true}).
-     * Задания, теги, преподаватели и категории не удаляются.
+     * Если проверка пройдена, удаляет задания и структуру тестов, затем курс
+     * вместе с модулями и уроками. Общие теги, преподаватель и категория сохраняются.
      * </p>
      *
      * @param courseId идентификатор курса для удаления
@@ -622,7 +623,26 @@ public class CourseService {
                             + "Удаление невозможно, пока не удалены все отзывы.");
         }
 
-        // Все проверки пройдены — удаляем курс
+        // Сначала удаляем зависимое содержимое, не затрагивая учебную историю.
+        for (Long quizId : quizIds) {
+            Quiz quiz = quizRepository.findByIdWithQuestions(quizId).orElseThrow();
+            for (Question question : quiz.getQuestions()) {
+                question.getOptions().forEach(entityManager::remove);
+                question.getOptions().clear();
+            }
+            entityManager.flush();
+            quiz.getQuestions().forEach(entityManager::remove);
+            quiz.getQuestions().clear();
+            entityManager.flush();
+            entityManager.remove(quiz);
+        }
+        entityManager.flush();
+        for (Long assignmentId : assignmentIds) {
+            entityManager.remove(entityManager.getReference(Assignment.class, assignmentId));
+        }
+        entityManager.flush();
+
+        // Модули и уроки удаляются каскадом вместе с курсом.
         courseRepository.delete(course);
     }
 }

@@ -154,6 +154,55 @@ class CourseDeletionTransactionTests {
         });
     }
 
+    /** Проверяет, что удаление задания с решением откатывается без потери данных. */
+    @Test
+    void deletionOfAssignmentWithSubmissionRollsBack() {
+        createFixture(true, false, false);
+        historyType = History.SUBMISSION;
+        transactions.executeWithoutResult(status -> {
+            Submission submission = new Submission(em.find(Assignment.class, assignmentId),
+                    em.find(User.class, studentId), "Решение");
+            em.persist(submission);
+            historyId = submission.getId();
+        });
+        assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
+        assertThrows(org.hibernate.exception.ConstraintViolationException.class,
+                () -> service.deleteAssignment(assignmentId));
+        transactions.executeWithoutResult(status -> {
+            assertNotNull(em.find(Assignment.class, assignmentId));
+            assertNotNull(em.find(Submission.class, historyId));
+            assertNotNull(em.find(Course.class, courseId));
+        });
+    }
+
+    /** Проверяет защиту решения при наличии отписанной записи на курс. */
+    @Test
+    void preservesHistoryAfterDrop() {
+        createFixture(true, false, false);
+        historyType = History.SUBMISSION;
+        Long enrollmentId = transactions.execute(status -> {
+            User student = em.find(User.class, studentId);
+            Enrollment enrollment = new Enrollment(student, em.find(Course.class, courseId),
+                    LocalDateTime.now(), EnrollmentStatus.DROPPED);
+            em.persist(enrollment);
+            Submission submission = new Submission(em.find(Assignment.class, assignmentId), student, "Решение");
+            em.persist(submission);
+            historyId = submission.getId();
+            return enrollment.getId();
+        });
+        try {
+            assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
+            assertThrows(IllegalStateException.class, () -> service.deleteCourse(courseId));
+            transactions.executeWithoutResult(status -> {
+                assertNotNull(em.find(Course.class, courseId));
+                assertNotNull(em.find(Enrollment.class, enrollmentId));
+                assertNotNull(em.find(Submission.class, historyId));
+            });
+        } finally {
+            transactions.executeWithoutResult(status -> delete("enrollments", enrollmentId));
+        }
+    }
+
     /** Проверяет отсутствие созданной структуры и сохранность преподавателя и категории в новой транзакции. */
     private void assertDeleted() {
         transactions.executeWithoutResult(status -> {
