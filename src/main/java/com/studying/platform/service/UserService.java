@@ -1,5 +1,6 @@
 package com.studying.platform.service;
 
+import com.studying.platform.dto.UserCreateDto;
 import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
@@ -113,5 +114,46 @@ public class UserService {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Пользователь с идентификатором " + userId + " не найден"));
+    }
+
+    /**
+     * Создаёт нового пользователя из переданного DTO.
+     * <p>
+     * Переносит поля DTO в сущность {@code User}, проверяет уникальность
+     * адреса электронной почты и сохраняет в базу данных.
+     * </p>
+     *
+     * @param dto данные для создания пользователя
+     * @return сохранённый пользователь
+     * @throws IllegalStateException если пользователь с таким адресом электронной почты уже существует
+     */
+    public User createUser(UserCreateDto dto) {
+        if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
+            throw new IllegalStateException(
+                    "Пользователь с адресом электронной почты " + dto.getEmail() + " уже существует");
+        }
+
+        User user = new User(dto.getEmail(), dto.getRole());
+        return userRepository.saveAndFlush(user);
+    }
+
+    /**
+     * Удаляет пользователя по идентификатору.
+     * <p>
+     * Проверяет существование пользователя и удаляет его из базы данных.
+     * Если у пользователя есть связанные данные, удаление может завершиться
+     * ошибкой на уровне базы данных (внешние ключи).
+     * </p>
+     *
+     * @param userId идентификатор пользователя для удаления
+     * @throws ResourceNotFoundException если пользователь с заданным идентификатором не найден
+     * @throws jakarta.persistence.PersistenceException при нарушении ограничений целостности БД
+     */
+    public void deleteUser(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException(
+                    "Пользователь с идентификатором " + userId + " не найден");
+        }
+        userRepository.deleteById(userId);
     }
 }
