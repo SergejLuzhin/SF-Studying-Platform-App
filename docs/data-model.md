@@ -236,6 +236,11 @@
 
 **Enum `QuestionType`:** `SINGLE_CHOICE`, `MULTIPLE_CHOICE`.
 
+Незавершённую структуру можно сохранять и дополнять. При прохождении требуется
+хотя бы один вопрос в тесте и хотя бы один вариант в каждом вопросе; для
+`SINGLE_CHOICE` нужен ровно один правильный вариант, для `MULTIPLE_CHOICE` —
+хотя бы один. Иначе результат не сохраняется.
+
 **Связи:**
 - `M:1` с `Quiz` (владелец — `Question`, LAZY)
 - `1:M` с `AnswerOption` (`@OneToMany(mappedBy = "question", fetch = FetchType.LAZY, cascade = {PERSIST, MERGE}, orphanRemoval = true)`)

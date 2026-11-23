@@ -6,6 +6,7 @@ import com.studying.platform.entity.Enrollment;
 import com.studying.platform.entity.EnrollmentStatus;
 import com.studying.platform.entity.Quiz;
 import com.studying.platform.entity.QuizSubmission;
+import com.studying.platform.entity.QuizQuestionType;
 import com.studying.platform.entity.Question;
 import com.studying.platform.entity.User;
 import com.studying.platform.exception.ResourceNotFoundException;
@@ -99,9 +100,13 @@ public class QuizSubmissionService {
      * 1. Проверяет существование викторины и студента.
      * 2. Проверяет активную запись студента на курс, к которому привязана викторина.
      * 3. Загружает все вопросы викторины и правильные варианты ответов.
-     * 4. Вычисляет балл на основе точного совпадения выбранных студентом вариантов
+     * 4. Проверяет готовность всех вопросов: наличие вариантов, ровно один правильный
+     *    для SINGLE_CHOICE и хотя бы один для MULTIPLE_CHOICE; пустой тест недопустим.
+     * 5. Вычисляет балл на основе точного совпадения выбранных студентом вариантов
      *    с правильными (для вопросов с одним и несколькими вариантами ответа).
-     * 5. Сохраняет новый результат {@link QuizSubmission}.
+     *    Посторонние идентификаторы вопросов игнорируются, варианты не своего вопроса
+     *    не считаются правильными.
+     * 6. Сохраняет новый результат {@link QuizSubmission}.
      * </p>
      *
      * @param quizId  идентификатор викторины
@@ -112,6 +117,7 @@ public class QuizSubmissionService {
      * @throws ResourceNotFoundException если викторина не найдена, студент не найден
      *                                   или студент не записан на курс викторины
      * @throws IllegalArgumentException  если параметр answers равен null
+     * @throws IllegalStateException если тест не содержит вопросов или его вопросы не готовы к прохождению
      */
     @Transactional
     public QuizSubmission submitAnswers(Long quizId, Long studentId, Map<Long, Set<Long>> answers) {
@@ -139,15 +145,29 @@ public class QuizSubmissionService {
         // 4. Загрузка структуры теста
         List<Question> questions = quiz.getQuestions().stream().toList();
         int totalQuestions = questions.size();
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("Тест не готов к прохождению: нет вопросов");
+        }
 
         // Сбор правильных ответов: questionId -> Set<optionId>
         Map<Long, Set<Long>> correctOptionsMap = new HashMap<>();
         for (Question question : questions) {
+            if (question.getOptions().isEmpty()) {
+                throw new IllegalStateException("Вопрос " + question.getId() + " не содержит вариантов ответа");
+            }
             Set<Long> correctOptionIds = new HashSet<>();
             for (AnswerOption option : question.getOptions()) {
                 if (Boolean.TRUE.equals(option.getIsCorrect())) {
                     correctOptionIds.add(option.getId());
                 }
+            }
+            if (question.getType() == QuizQuestionType.SINGLE_CHOICE && correctOptionIds.size() != 1) {
+                throw new IllegalStateException("Вопрос SINGLE_CHOICE " + question.getId()
+                        + " должен содержать ровно один правильный вариант");
+            }
+            if (question.getType() == QuizQuestionType.MULTIPLE_CHOICE && correctOptionIds.isEmpty()) {
+                throw new IllegalStateException("Вопрос MULTIPLE_CHOICE " + question.getId()
+                        + " должен содержать хотя бы один правильный вариант");
             }
             correctOptionsMap.put(question.getId(), correctOptionIds);
         }
@@ -169,7 +189,7 @@ public class QuizSubmissionService {
         }
 
         // Целочисленное деление: (правильных / всего) * 100
-        int score = totalQuestions > 0 ? (correctCount * 100) / totalQuestions : 0;
+        int score = (correctCount * 100) / totalQuestions;
 
         // 6. Сохранение результата
         QuizSubmission submission = new QuizSubmission(quiz, student, score, LocalDateTime.now());
