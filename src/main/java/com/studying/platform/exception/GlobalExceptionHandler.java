@@ -5,6 +5,7 @@ import com.studying.platform.dto.ErrorResponseDto;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -128,6 +129,31 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 exception.getMessage(),
+                request.getDescription(false).replace("uri=", ""));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    /**
+     * Обработка исключения нарушения целостности данных.
+     * <p>
+     * Возвращает HTTP 400 с сообщением о нарушении ограничений базы данных
+     * (например, дублирование уникального поля).
+     * </p>
+     *
+     * @param exception исключение нарушения целостности
+     * @param request   контекст запроса, содержащий путь
+     * @return HTTP-ответ с кодом 400 и телом ErrorResponseDto
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponseDto> handleDataIntegrityViolationException(
+            DataIntegrityViolationException exception, WebRequest request) {
+
+        ErrorResponseDto errorResponse = new ErrorResponseDto(
+                LocalDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Нарушение целостности данных: " + exception.getMostSpecificCause().getMessage(),
                 request.getDescription(false).replace("uri=", ""));
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);

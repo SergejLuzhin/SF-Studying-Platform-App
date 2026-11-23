@@ -81,16 +81,24 @@ public class QuizSubmissionService {
      * доступны скалярные поля викторины и загруженная структура; доступность других
      * ленивых связей не гарантируется. Сущность содержит признаки правильных ответов
      * и не предназначена для непосредственной выдачи студенту через публичный API.
+     * Если викторина не содержит вопросов — выбрасывается {@link IllegalStateException}.
      * </p>
      *
      * @param quizId идентификатор викторины
      * @return найденная викторина с вопросами и вариантами ответов
      * @throws ResourceNotFoundException если викторина с заданным идентификатором не найдена
+     * @throws IllegalStateException если тест не содержит вопросов и не готов к прохождению
      */
     @Transactional(readOnly = true)
     public Quiz startQuiz(Long quizId) {
-        return quizRepository.findByIdWithQuestions(quizId)
+        Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
                 .orElseThrow(() -> new ResourceNotFoundException("Викторина с идентификатором " + quizId + " не найдена"));
+
+        if (quiz.getQuestions().isEmpty()) {
+            throw new IllegalStateException("Тест не готов к прохождению: нет вопросов");
+        }
+
+        return quiz;
     }
 
     /**
@@ -197,5 +205,51 @@ public class QuizSubmissionService {
         entityManager.flush();
 
         return submission;
+    }
+
+    /**
+     * Возвращает результат прохождения теста по идентификатору.
+     * <p>
+     * Проверяет существование результата. Если результат не найден —
+     * выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param id идентификатор результата прохождения теста
+     * @return найденный результат
+     * @throws ResourceNotFoundException если результат не найден
+     */
+    @Transactional(readOnly = true)
+    public QuizSubmission findQuizSubmissionById(Long id) {
+        return quizSubmissionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Результат прохождения теста с идентификатором " + id + " не найден"));
+    }
+
+    /**
+     * Возвращает список всех результатов указанного студента.
+     * <p>
+     * Метод выполняется в режиме только для чтения.
+     * </p>
+     *
+     * @param studentId идентификатор студента
+     * @return список результатов студента
+     */
+    @Transactional(readOnly = true)
+    public List<QuizSubmission> getSubmissionsByStudent(Long studentId) {
+        return quizSubmissionRepository.findByStudentId(studentId);
+    }
+
+    /**
+     * Возвращает список всех результатов указанной викторины.
+     * <p>
+     * Метод выполняется в режиме только для чтения.
+     * </p>
+     *
+     * @param quizId идентификатор викторины
+     * @return список результатов викторины
+     */
+    @Transactional(readOnly = true)
+    public List<QuizSubmission> getSubmissionsByQuiz(Long quizId) {
+        return quizSubmissionRepository.findByQuizId(quizId);
     }
 }

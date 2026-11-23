@@ -117,15 +117,13 @@ class QuizServiceTransactionTests {
         assertTrue(quiz.getQuestions().stream().allMatch(question -> question.getOptions().size() == 2));
     }
 
-    /** Проверяет доступность пустой коллекции вопросов после завершения транзакции. */
+    /** Проверяет, что викторина без вопросов отклоняется при запуске. */
     @Test
-    void startQuizWithoutQuestionsReturnsEmptyStructure() {
+    void startQuizWithoutQuestionsThrowsException() {
         createFixture(false);
         assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
-        Quiz quiz = service.startQuiz(quizId);
+        assertThrows(IllegalStateException.class, () -> service.startQuiz(quizId));
         assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
-        assertEquals("Проверка знаний", quiz.getTitle());
-        assertTrue(quiz.getQuestions().isEmpty());
     }
 
     /** Проверяет ожидаемое исключение для отсутствующего теста. */

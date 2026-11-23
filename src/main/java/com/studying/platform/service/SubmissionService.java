@@ -210,6 +210,22 @@ public class SubmissionService {
     }
 
     /**
+     * Возвращает решение по идентификатору.
+     * <p>
+     * Проверяет существование решения. Если решение не найдено — выбрасывает исключение.
+     * </p>
+     *
+     * @param submissionId идентификатор решения
+     * @return найденное решение
+     * @throws ResourceNotFoundException если решение не найдено
+     */
+    public Submission findSubmissionById(Long submissionId) {
+        return submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Решение с идентификатором " + submissionId + " не найдено"));
+    }
+
+    /**
      * Возвращает список всех решений заданного задания.
      * <p>
      * Проверяет существование задания. Если задание не найдено — выбрасывает исключение.
