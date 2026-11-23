@@ -8,6 +8,7 @@ import com.studying.platform.entity.Lesson;
 import com.studying.platform.entity.Module;
 import com.studying.platform.entity.Submission;
 import com.studying.platform.entity.User;
+import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
 import com.studying.platform.repository.AssignmentRepository;
 import com.studying.platform.repository.EnrollmentRepository;
@@ -158,24 +159,23 @@ public class SubmissionService {
 
     /**
      * Выставляет оценку и комментарий преподавателя к решению студента.
-     * <p>
      * Выполняет следующие проверки:
      * <ol>
      *   <li>Существование решения по идентификатору;</li>
-     *   <li>Существование преподавателя (пользователя) по идентификатору;</li>
-     *   <li>Допустимый диапазон оценки: оценка не может быть меньше 0, а при наличии
+     *   <li>Существование пользователя и наличие роли преподавателя;</li>
+     *   <li>Наличие и допустимый диапазон оценки: оценка не может быть меньше 0, а при наличии
      *       максимального балла задания — не может превышать его.</li>
      * </ol>
      * При успешной проверке обновляются поля {@code score} и {@code feedback} решения.
      * Метод допускает перезапись ранее выставленной оценки.
-     * </p>
      *
      * @param submissionId идентификатор решения
      * @param score        оценка студента
      * @param feedback     комментарий преподавателя (может быть {@code null})
      * @param teacherId    идентификатор преподавателя
      * @throws ResourceNotFoundException если решение или преподаватель не найдены
-     * @throws IllegalArgumentException  если оценка выходит за допустимый диапазон
+     * @throws IllegalArgumentException если пользователь не преподаватель, оценка равна {@code null}
+     *                                  или выходит за допустимый диапазон
      */
     public void gradeSubmission(Long submissionId, Integer score, String feedback, Long teacherId) {
         // 1. Проверка существования решения
@@ -184,11 +184,17 @@ public class SubmissionService {
                         "Решение с идентификатором " + submissionId + " не найдено"));
 
         // 2. Проверка существования преподавателя
-        userRepository.findById(teacherId)
+        User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Преподаватель с идентификатором " + teacherId + " не найден"));
+        if (teacher.getRole() != UserRole.TEACHER) {
+            throw new IllegalArgumentException("Пользователь с идентификатором " + teacherId + " не является преподавателем");
+        }
 
         // 3. Валидация диапазона оценки
+        if (score == null) {
+            throw new IllegalArgumentException("Оценка обязательна");
+        }
         if (score < 0) {
             throw new IllegalArgumentException("Оценка не может быть отрицательной, получено: " + score);
         }
