@@ -148,12 +148,8 @@ public class SubmissionService {
         }
 
         // 5. Создание и сохранение решения
-        Submission submission = new Submission(assignment, null, content);
-        submission.setSubmittedAt(LocalDateTime.now());
-
-        // Загрузка студента внутри транзакции
         User student = entityManager.getReference(User.class, studentId);
-        submission.setStudent(student);
+        Submission submission = new Submission(assignment, student, content);
 
         entityManager.persist(submission);
         entityManager.flush();

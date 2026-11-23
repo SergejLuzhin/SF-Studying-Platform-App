@@ -39,6 +39,7 @@ import java.util.Set;
  * @see Quiz
  */
 @Service
+@Transactional
 public class QuizSubmissionService {
 
     private final QuizSubmissionRepository quizSubmissionRepository;
