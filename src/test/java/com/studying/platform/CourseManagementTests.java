@@ -106,6 +106,36 @@ class CourseManagementTests {
     private TagRepository tagRepository;
 
     /**
+     * Репозиторий для сущности Submission.
+     */
+    @Autowired
+    private com.studying.platform.repository.SubmissionRepository submissionRepository;
+
+    /**
+     * Репозиторий для сущности QuizSubmission.
+     */
+    @Autowired
+    private com.studying.platform.repository.QuizSubmissionRepository quizSubmissionRepository;
+
+    /**
+     * Репозиторий для сущности Quiz.
+     */
+    @Autowired
+    private com.studying.platform.repository.QuizRepository quizRepository;
+
+    /**
+     * Репозиторий для сущности Enrollment.
+     */
+    @Autowired
+    private com.studying.platform.repository.EnrollmentRepository enrollmentRepository;
+
+    /**
+     * Репозиторий для сущности CourseReview.
+     */
+    @Autowired
+    private com.studying.platform.repository.CourseReviewRepository courseReviewRepository;
+
+    /**
      * Инициализирует сервисный слой перед каждым тестом.
      */
     @BeforeEach
@@ -118,7 +148,12 @@ class CourseManagementTests {
                 categoryRepository,
                 entityManager,
                 assignmentRepository,
-                tagRepository
+                tagRepository,
+                submissionRepository,
+                quizSubmissionRepository,
+                quizRepository,
+                enrollmentRepository,
+                courseReviewRepository
         );
     }
 

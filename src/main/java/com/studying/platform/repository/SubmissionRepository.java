@@ -3,6 +3,7 @@ package com.studying.platform.repository;
 import com.studying.platform.entity.Submission;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,4 +46,16 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
      * @return обязательное значение с решением, если найдено; пустое значение — если нет
      */
     Optional<Submission> findByAssignmentIdAndStudentId(Long assignmentId, Long studentId);
+
+    /**
+     * Подсчитывает количество решений для указанных заданий.
+     * <p>
+     * Используется для проверки наличия сохранённых решений
+     * перед удалением курса или задания.
+     * </p>
+     *
+     * @param assignmentIds идентификаторы заданий
+     * @return количество решений для указанных заданий
+     */
+    long countByAssignmentIdIn(Collection<Long> assignmentIds);
 }

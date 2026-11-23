@@ -3,6 +3,7 @@ package com.studying.platform.service;
 import com.studying.platform.entity.Assignment;
 import com.studying.platform.entity.Category;
 import com.studying.platform.entity.Course;
+import com.studying.platform.entity.EnrollmentStatus;
 import com.studying.platform.entity.Lesson;
 import com.studying.platform.entity.Module;
 import com.studying.platform.entity.Tag;
@@ -12,8 +13,13 @@ import com.studying.platform.exception.ResourceNotFoundException;
 import com.studying.platform.repository.AssignmentRepository;
 import com.studying.platform.repository.CategoryRepository;
 import com.studying.platform.repository.CourseRepository;
+import com.studying.platform.repository.CourseReviewRepository;
+import com.studying.platform.repository.EnrollmentRepository;
 import com.studying.platform.repository.LessonRepository;
 import com.studying.platform.repository.ModuleRepository;
+import com.studying.platform.repository.QuizRepository;
+import com.studying.platform.repository.QuizSubmissionRepository;
+import com.studying.platform.repository.SubmissionRepository;
 import com.studying.platform.repository.TagRepository;
 import com.studying.platform.repository.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -84,6 +90,31 @@ public class CourseService {
     private final TagRepository tagRepository;
 
     /**
+     * Репозиторий для работы с сущностью «Решение».
+     */
+    private final SubmissionRepository submissionRepository;
+
+    /**
+     * Репозиторий для работы с сущностью «Результат прохождения теста».
+     */
+    private final QuizSubmissionRepository quizSubmissionRepository;
+
+    /**
+     * Репозиторий для работы с сущностью «Викторина».
+     */
+    private final QuizRepository quizRepository;
+
+    /**
+     * Репозиторий для работы с сущностью «Запись на курс».
+     */
+    private final EnrollmentRepository enrollmentRepository;
+
+    /**
+     * Репозиторий для работы с сущностью «Отзыв о курсе».
+     */
+    private final CourseReviewRepository courseReviewRepository;
+
+    /**
      * Конструктор сервиса с внедрением зависимостей через конструктор.
      *
      * @param courseRepository   репозиторий курсов
@@ -94,6 +125,11 @@ public class CourseService {
      * @param entityManager      менеджер сущностей JPA
      * @param assignmentRepository репозиторий заданий
      * @param tagRepository       репозиторий тегов
+     * @param submissionRepository репозиторий решений
+     * @param quizSubmissionRepository репозиторий результатов тестов
+     * @param quizRepository      репозиторий викторин
+     * @param enrollmentRepository репозиторий записей
+     * @param courseReviewRepository репозиторий отзывов
      */
     public CourseService(CourseRepository courseRepository,
                          ModuleRepository moduleRepository,
@@ -102,7 +138,12 @@ public class CourseService {
                          CategoryRepository categoryRepository,
                          EntityManager entityManager,
                          AssignmentRepository assignmentRepository,
-                         TagRepository tagRepository) {
+                         TagRepository tagRepository,
+                         SubmissionRepository submissionRepository,
+                         QuizSubmissionRepository quizSubmissionRepository,
+                         QuizRepository quizRepository,
+                         EnrollmentRepository enrollmentRepository,
+                         CourseReviewRepository courseReviewRepository) {
         this.courseRepository = courseRepository;
         this.moduleRepository = moduleRepository;
         this.lessonRepository = lessonRepository;
@@ -111,6 +152,11 @@ public class CourseService {
         this.entityManager = entityManager;
         this.assignmentRepository = assignmentRepository;
         this.tagRepository = tagRepository;
+        this.submissionRepository = submissionRepository;
+        this.quizSubmissionRepository = quizSubmissionRepository;
+        this.quizRepository = quizRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.courseReviewRepository = courseReviewRepository;
     }
 
     /**
@@ -492,5 +538,91 @@ public class CourseService {
         course.getTags().removeAll(tags);
         entityManager.flush();
         return course;
+    }
+
+    /**
+     * Удаляет курс по идентификатору с проверкой отсутствия учебной истории.
+     * <p>
+     * Перед удалением проверяет, что у курса нет записей (включая отписавшихся студентов),
+     * решений, результатов тестов и отзывов. Если какая-либо проверка не пройдена —
+     * выбрасывает {@link IllegalStateException} с понятным сообщением.
+     * </p>
+     * <p>
+     * Если проверка пройдена, курс удаляется вместе с модулями и уроками
+     * (благодаря каскадным операциям {@code REMOVE} и {@code orphanRemoval = true}).
+     * Задания, теги, преподаватели и категории не удаляются.
+     * </p>
+     *
+     * @param courseId идентификатор курса для удаления
+     * @throws ResourceNotFoundException если курс с заданным идентификатором не найден
+     * @throws IllegalStateException если курс имеет записи, решения, результаты тестов или отзывы
+     */
+    public void deleteCourse(Long courseId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Курс с идентификатором " + courseId + " не найден"));
+
+        // Инициализация ленивой коллекции модулей
+        Set<Module> modules = course.getModules();
+        int moduleCount = modules.size();
+
+        // Собираем ID уроков и заданий из модулей
+        Set<Long> assignmentIds = new HashSet<>();
+        List<Long> moduleIds = new java.util.ArrayList<>();
+
+        for (Module module : modules) {
+            moduleIds.add(module.getId());
+            for (Lesson lesson : module.getLessons()) {
+                List<Assignment> assignments = assignmentRepository.findByLessonId(lesson.getId());
+                for (Assignment assignment : assignments) {
+                    assignmentIds.add(assignment.getId());
+                }
+            }
+        }
+
+        // Собираем ID викторин из модулей
+        Set<Long> quizIds = new HashSet<>();
+        for (Long moduleId : moduleIds) {
+            quizRepository.findByModuleId(moduleId).ifPresent(q -> quizIds.add(q.getId()));
+        }
+
+        // Проверяем наличие сохранённых решений
+        if (!assignmentIds.isEmpty()) {
+            long submissionCount = submissionRepository.countByAssignmentIdIn(assignmentIds);
+            if (submissionCount > 0) {
+                throw new IllegalStateException(
+                        "Нельзя удалить курс: есть сохранённые решения студентов. "
+                                + "Удаление невозможно, так как решения являются учебной историей.");
+            }
+        }
+
+        // Проверяем наличие результатов тестов
+        if (!quizIds.isEmpty()) {
+            long quizSubmissionCount = quizSubmissionRepository.countByQuizIdIn(quizIds);
+            if (quizSubmissionCount > 0) {
+                throw new IllegalStateException(
+                        "Нельзя удалить курс: есть результаты прохождения тестов. "
+                                + "Удаление невозможно, так как результаты являются учебной историей.");
+            }
+        }
+
+        // Проверяем наличие записей (включая отписавшихся — DROPPED)
+        long enrollmentCount = enrollmentRepository.countByCourseId(courseId);
+        if (enrollmentCount > 0) {
+            throw new IllegalStateException(
+                    "Нельзя удалить курс: есть записи студентов (включая отписавшихся). "
+                            + "Удаление невозможно, пока не удалены все записи.");
+        }
+
+        // Проверяем наличие отзывов
+        long reviewCount = courseReviewRepository.countByCourseId(courseId);
+        if (reviewCount > 0) {
+            throw new IllegalStateException(
+                    "Нельзя удалить курс: есть отзывы студентов. "
+                            + "Удаление невозможно, пока не удалены все отзывы.");
+        }
+
+        // Все проверки пройдены — удаляем курс
+        courseRepository.delete(course);
     }
 }

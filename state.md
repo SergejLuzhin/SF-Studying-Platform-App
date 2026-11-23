@@ -2,26 +2,36 @@
 
 ## Текущий этап
 
-Следующий этап — 15 «Удаление и целостность» (`pending`).
+Следующий этап — 16 «Основа REST API» (`pending`).
 
 ## Последние изменения
 
-### Этап 14. Отзывы и теги (completed)
+### Этап 15. Удаление и целостность (completed)
 
-- Создан репозиторий: `TagRepository` (extends JpaRepository<Tag, Long>).
-- Дополнен репозиторий: `CourseReviewRepository` — добавлены методы `findByStudentIdAndCourseId`, `findByCourseId`, `findByStudentId`.
-- Дополнен репозиторий: `CourseRepository` — добавлен JPQL-метод `countTagsByCourseId` для подсчёта тегов без загрузки lazy-коллекции.
-- Дополнен `CourseService`: добавлены методы `addTagsToCourse(Set<Long>)`, `removeTagsFromCourse(Set<Long>)`; добавлена зависимость `TagRepository`.
-- Создан сервис: `CourseReviewService` с методами `createReview`, `getReviewsByCourse`, `getReviewsByStudent`.
-  - Реализована проверка: роль STUDENT, активная запись на курс (EnrollmentStatus.ACTIVE), рейтинг 1–5, уникальность отзыва.
-- Добавлены интеграционные тесты: `CourseReviewAndTagTests.java` (19 тестов) — позитивные сценарии (создание отзывов, чтение по курсу/студенту, привязка/отвязка тегов) и негативные (несуществующие ID, неверная роль, отсутствие записи, дублирование, некорректный рейтинг).
-- Исправлен `CourseManagementTests.java` — добавлена зависимость `TagRepository` в конструктор `CourseService`.
+- Добавлены методы подсчёта в репозитории:
+  - `SubmissionRepository` — `countByAssignmentIdIn(Collection<Long>)` для проверки наличия решений по списку заданий.
+  - `QuizSubmissionRepository` — `countByQuizIdIn(Collection<Long>)` для проверки наличия результатов тестов по списку викторин.
+  - `CourseRepository` — `countEnrollmentsByCourseId(Long)` и `countReviewsByCourseId(Long)` для проверки записей и отзывов.
+  - `EnrollmentRepository` — `countByCourseId(Long)` для подсчёта всех записей на курс (независимо от статуса).
+  - `CourseReviewRepository` — `countByCourseId(Long)` для подсчёта отзывов курса.
+- В `CourseService` добавлен метод `deleteCourse(Long)` с полной проверкой целостности:
+  - Собираются ID заданий из всех модулей/уроков и ID викторин из модулей.
+  - Проверяются: наличие решений, результатов тестов, записей (ACTIVE и DROPPED), отзывов.
+  - При наличии любой учебной истории — выбрасывается `IllegalStateException`.
+  - При отсутствии истории — курс удаляется каскадом (модули и уроки удаляются через `orphanRemoval`).
+  - Преподаватель, категория и теги не затрагиваются.
+- Обновлён конструктор `CourseService` (8 → 13 параметров).
+- Обновлён `CourseManagementTests.java` — добавлены новые репозитории в `setUp()`.
+- Создан `CourseDeletionTests.java` — 12 интеграционных тестов (3 позитивных, 6 негативных, 3 на защиту общих объектов).
 
 ## Проверки
 
-- **PASS:** компиляция проекта и тестов (`mvn clean compile test-compile`).
+- **PASS:** компиляция проекта и тестов (`mvn compile test-compile`).
 - **PASS:** `git diff --check` — без ошибок форматирования.
-- **PASS:** полный прогон всех тестов: 251 тест, 0 ошибок, 0 пропусков.
+- **PASS:** полный прогон всех тестов: 263 теста, 0 ошибок, 0 пропусков.
+  - `CourseDeletionTests` — 12 тестов, все прошли.
+  - `CourseManagementTests` — обновлены зависимости, все прошли.
+  - Остальные существующие тесты — без изменений, прошли.
 
 ## База данных
 

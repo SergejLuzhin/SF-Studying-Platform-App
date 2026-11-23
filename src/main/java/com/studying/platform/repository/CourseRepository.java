@@ -44,4 +44,29 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
      */
     @Query("SELECT COUNT(t) FROM Course c JOIN c.tags t WHERE c.id = ?1")
     long countTagsByCourseId(Long courseId);
+
+    /**
+     * Подсчитывает количество записей студентов на указанный курс.
+     * <p>
+     * Используется для проверки наличия записей (включая отписавшихся)
+     * перед удалением курса. Считает все записи независимо от статуса.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @return количество записей на курс
+     */
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId")
+    long countEnrollmentsByCourseId(Long courseId);
+
+    /**
+     * Подсчитывает количество отзывов для указанного курса.
+     * <p>
+     * Используется для проверки наличия отзывов перед удалением курса.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @return количество отзывов курса
+     */
+    @Query("SELECT COUNT(r) FROM CourseReview r WHERE r.course.id = :courseId")
+    long countReviewsByCourseId(Long courseId);
 }

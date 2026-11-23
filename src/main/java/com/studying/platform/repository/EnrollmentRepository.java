@@ -81,4 +81,16 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
      * @return количество записей с указанным статусом
      */
     long countByCourseIdAndStatus(Long courseId, EnrollmentStatus status);
+
+    /**
+     * Подсчитывает количество всех записей на курс.
+     * <p>
+     * Используется при удалении курса для проверки наличия любых записей —
+     * как активных, так и отписавшихся. Считает все записи независимо от статуса.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @return количество всех записей на курс
+     */
+    long countByCourseId(Long courseId);
 }

@@ -2,6 +2,7 @@ package com.studying.platform.repository;
 
 import com.studying.platform.entity.CourseReview;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -47,4 +48,16 @@ public interface CourseReviewRepository extends JpaRepository<CourseReview, Long
      * @return список отзывов студента
      */
     List<CourseReview> findByStudentId(Long studentId);
+
+    /**
+     * Подсчитывает количество отзывов для указанного курса.
+     * <p>
+     * Используется для проверки наличия отзывов перед удалением курса.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @return количество отзывов курса
+     */
+    @Query("SELECT COUNT(r) FROM CourseReview r WHERE r.course.id = ?1")
+    long countByCourseId(Long courseId);
 }
