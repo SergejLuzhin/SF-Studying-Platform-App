@@ -162,6 +162,54 @@ public class CourseService {
     }
 
     /**
+     * Получает курс по идентификатору.
+     * <p>
+     * Если курс не найден — выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param courseId идентификатор курса
+     * @return найденный курс
+     * @throws ResourceNotFoundException если курс не найден
+     */
+    public Course findCourse(Long courseId) {
+        return courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Курс с идентификатором " + courseId + " не найден"));
+    }
+
+    /**
+     * Получает модуль по идентификатору.
+     * <p>
+     * Если модуль не найден — выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param moduleId идентификатор модуля
+     * @return найденный модуль
+     * @throws ResourceNotFoundException если модуль не найден
+     */
+    public Module findModule(Long moduleId) {
+        return moduleRepository.findById(moduleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Модуль с идентификатором " + moduleId + " не найден"));
+    }
+
+    /**
+     * Получает урок по идентификатору.
+     * <p>
+     * Если урок не найден — выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param lessonId идентификатор урока
+     * @return найденный урок
+     * @throws ResourceNotFoundException если урок не найден
+     */
+    public Lesson findLesson(Long lessonId) {
+        return lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Урок с идентификатором " + lessonId + " не найден"));
+    }
+
+    /**
      * Проверяет корректность продолжительности курса.
      * <p>
      * Если значение равно {@code null} или меньше единицы —
@@ -353,6 +401,107 @@ public class CourseService {
         }
 
         return course;
+    }
+
+    /**
+     * Обновляет поля существующего модуля.
+     * <p>
+     * Проверяет существование модуля по идентификатору.
+     * Обновляет только не-{@code null} поля: название, описание, порядковый номер.
+     * </p>
+     *
+     * @param moduleId    идентификатор модуля для обновления
+     * @param title       новое название модуля
+     * @param description новое описание модуля
+     * @param orderIndex  новый порядковый номер
+     * @return обновлённый модуль
+     * @throws ResourceNotFoundException если модуль не найден
+     */
+    public Module updateModule(Long moduleId, String title, String description, Integer orderIndex) {
+        Module module = moduleRepository.findById(moduleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Модуль с идентификатором " + moduleId + " не найден"));
+
+        if (title != null) {
+            module.setTitle(title);
+        }
+        if (description != null) {
+            module.setDescription(description);
+        }
+        if (orderIndex != null) {
+            module.setOrderIndex(orderIndex);
+        }
+
+        return moduleRepository.save(module);
+    }
+
+    /**
+     * Удаляет модуль по идентификатору.
+     * <p>
+     * Проверяет существование модуля. Удаляет модуль вместе с уроками
+     * благодаря каскадным операциям.
+     * </p>
+     *
+     * @param moduleId идентификатор модуля для удаления
+     * @throws ResourceNotFoundException если модуль не найден
+     */
+    public void deleteModule(Long moduleId) {
+        Module module = moduleRepository.findById(moduleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Модуль с идентификатором " + moduleId + " не найден"));
+
+        moduleRepository.delete(module);
+        entityManager.flush();
+    }
+
+    /**
+     * Обновляет поля существующего урока.
+     * <p>
+     * Проверяет существование урока по идентификатору.
+     * Обновляет только не-{@code null} поля: название, содержание, ссылка на видео.
+     * </p>
+     *
+     * @param lessonId  идентификатор урока для обновления
+     * @param title     новое название урока
+     * @param content   новое содержание урока
+     * @param videoUrl  новая ссылка на видео
+     * @return обновлённый урок
+     * @throws ResourceNotFoundException если урок не найден
+     */
+    public Lesson updateLesson(Long lessonId, String title, String content, String videoUrl) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Урок с идентификатором " + lessonId + " не найден"));
+
+        if (title != null) {
+            lesson.setTitle(title);
+        }
+        if (content != null) {
+            lesson.setContent(content);
+        }
+        if (videoUrl != null) {
+            lesson.setVideoUrl(videoUrl);
+        }
+
+        return lessonRepository.save(lesson);
+    }
+
+    /**
+     * Удаляет урок по идентификатору.
+     * <p>
+     * Проверяет существование урока. Удаляет урок из базы данных.
+     * </p>
+     *
+     * @param lessonId идентификатор урока для удаления
+     * @throws ResourceNotFoundException если урок не найден
+     */
+    public void deleteLesson(Long lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Урок с идентификатором " + lessonId + " не найден"));
+
+        lessonRepository.delete(lesson);
+        entityManager.flush();
     }
 
     /**

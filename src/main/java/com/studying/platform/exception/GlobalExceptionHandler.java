@@ -83,6 +83,32 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Обработка исключения некорректных аргументов.
+     * <p>
+     * Возвращает HTTP 400 с сообщением о некорректном вводе,
+     * который не был перехвачен валидацией полей (например,
+     * некорректная продолжительность курса).
+     * </p>
+     *
+     * @param exception исключение некорректных аргументов
+     * @param request   контекст запроса, содержащий путь
+     * @return HTTP-ответ с кодом 400 и телом ErrorResponseDto
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponseDto> handleIllegalArgumentException(
+            IllegalArgumentException exception, WebRequest request) {
+
+        ErrorResponseDto errorResponse = new ErrorResponseDto(
+                LocalDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                exception.getMessage(),
+                request.getDescription(false).replace("uri=", ""));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    /**
      * Обработка исключения нарушения бизнес-правил.
      * <p>
      * Возвращает HTTP 400 с сообщением о нарушенном бизнес-правиле

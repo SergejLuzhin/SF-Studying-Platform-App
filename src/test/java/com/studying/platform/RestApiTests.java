@@ -1,6 +1,10 @@
 package com.studying.platform;
 
+import com.studying.platform.dto.CourseRequestDto;
+import com.studying.platform.dto.CourseResponseDto;
 import com.studying.platform.dto.ErrorResponseDto;
+import com.studying.platform.dto.LessonRequestDto;
+import com.studying.platform.dto.ModuleRequestDto;
 import com.studying.platform.dto.UserCreateDto;
 import com.studying.platform.dto.UserResponseDto;
 import com.studying.platform.entity.UserRole;
@@ -17,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDate;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -63,6 +68,7 @@ class RestApiTests {
 
     private final java.util.List<Long> createdUserIds = new java.util.ArrayList<>();
     private final java.util.List<Long> createdCategoryIds = new java.util.ArrayList<>();
+    private final java.util.List<Long> createdCourseIds = new java.util.ArrayList<>();
 
     /**
      * Очищает созданные тестом данные после каждого теста.
@@ -70,7 +76,17 @@ class RestApiTests {
     @AfterEach
     void cleanUp() {
         transactions.executeWithoutResult(status -> {
-            // Удаляем категории (сначала разрываем связи с курсами)
+            // Удаляем уроки (связаны с модулями)
+            jdbcTemplate.update("delete from lessons");
+            // Удаляем модули (связаны с курсами)
+            jdbcTemplate.update("delete from modules");
+            // Удаляем записи (связаны с курсами)
+            jdbcTemplate.update("delete from enrollments");
+            // Удаляем курсы
+            for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
+                jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
+            }
+            // Удаляем категории (связаны с курсами)
             for (int i = createdCategoryIds.size() - 1; i >= 0; i--) {
                 jdbcTemplate.update("delete from categories where id = ?", createdCategoryIds.get(i));
             }
@@ -80,6 +96,7 @@ class RestApiTests {
             }
             createdUserIds.clear();
             createdCategoryIds.clear();
+            createdCourseIds.clear();
         });
     }
 
@@ -514,5 +531,680 @@ class RestApiTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ==================== Тесты для курсов, модулей и уроков (Этап 17) ====================
+
+    /**
+     * Создаёт преподавателя через API и возвращает его ID.
+     */
+    private Long createTeacher(String email) throws Exception {
+        return createUser(email, UserRole.TEACHER);
+    }
+
+    /**
+     * Создаёт курс через API и возвращает его ID.
+     */
+    private Long createCourse(Long teacherId, Long categoryId) throws Exception {
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Курс " + System.currentTimeMillis());
+        dto.setDescription("Описание курса");
+        dto.setDuration(40);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(teacherId);
+        dto.setCategoryId(categoryId);
+
+        MvcResult result = mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andReturn();
+
+        CourseResponseDto response = objectMapper.readValue(
+                result.getResponse().getContentAsString(), CourseResponseDto.class);
+        createdCourseIds.add(response.getId());
+        return response.getId();
+    }
+
+    /**
+     * Проверка: создание курса успешно (HTTP 201).
+     */
+    @Test
+    void createCourse_shouldReturn201() throws Exception {
+        Long teacherId = createTeacher("teacher-course@test.io");
+        Long categoryId = createCategory("Тестовая категория для курса");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        assertNotNull(courseId, "ID созданного курса не должен быть null");
+
+        mockMvc.perform(get("/api/courses/" + courseId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(courseId))
+                .andExpect(jsonPath("$.title").isNotEmpty())
+                .andExpect(jsonPath("$.teacherId").value(teacherId))
+                .andExpect(jsonPath("$.categoryId").value(categoryId));
+    }
+
+    /**
+     * Проверка: чтение существующего курса (HTTP 200).
+     */
+    @Test
+    void getCourse_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-get@test.io");
+        Long categoryId = createCategory("Категория для чтения");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        mockMvc.perform(get("/api/courses/" + courseId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(courseId))
+                .andExpect(jsonPath("$.teacherId").value(teacherId))
+                .andExpect(jsonPath("$.categoryId").value(categoryId))
+                .andExpect(jsonPath("$.duration").value(40))
+                .andExpect(jsonPath("$.description").value("Описание курса"));
+    }
+
+    /**
+     * Проверка: обновление курса (HTTP 200).
+     */
+    @Test
+    void updateCourse_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-update@test.io");
+        Long categoryId = createCategory("Категория для обновления");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Обновлённый курс");
+        dto.setDescription("Новое описание");
+        dto.setDuration(60);
+        dto.setStartDate(LocalDate.of(2026, 6, 1));
+        dto.setTeacherId(teacherId);
+        dto.setCategoryId(categoryId);
+
+        mockMvc.perform(put("/api/courses/" + courseId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Обновлённый курс"))
+                .andExpect(jsonPath("$.description").value("Новое описание"))
+                .andExpect(jsonPath("$.duration").value(60));
+    }
+
+    /**
+     * Проверка: удаление пустого курса успешно (HTTP 204).
+     */
+    @Test
+    void deleteCourse_shouldReturn204() throws Exception {
+        Long teacherId = createTeacher("teacher-delete@test.io");
+        Long categoryId = createCategory("Категория для удаления");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        mockMvc.perform(delete("/api/courses/" + courseId))
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * Проверка: добавление модуля к курсу (HTTP 201).
+     */
+    @Test
+    void addModule_shouldReturn201() throws Exception {
+        Long teacherId = createTeacher("teacher-module@test.io");
+        Long categoryId = createCategory("Категория для модуля");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        ModuleRequestDto dto = new ModuleRequestDto();
+        dto.setTitle("Модуль 1");
+        dto.setDescription("Описание модуля");
+        dto.setOrderIndex(1);
+
+        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.title").value("Модуль 1"))
+                .andReturn();
+
+        com.studying.platform.dto.ModuleResponseDto response = objectMapper.readValue(
+                result.getResponse().getContentAsString(),
+                com.studying.platform.dto.ModuleResponseDto.class);
+        assertNotNull(response.getId());
+    }
+
+    /**
+     * Проверка: получение структуры курса (HTTP 200).
+     */
+    @Test
+    void getCourseStructure_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-structure@test.io");
+        Long categoryId = createCategory("Категория для структуры");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        // Добавляем модуль
+        ModuleRequestDto moduleDto = new ModuleRequestDto("Модуль структуры", "Описание", 1);
+        mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(moduleDto)))
+                .andExpect(status().isCreated());
+
+        // Добавляем урок
+        LessonRequestDto lessonDto = new LessonRequestDto("Урок 1", "Содержание урока", "http://example.com/video");
+        Long moduleId = getModuleIdByCourse(courseId);
+
+        mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(lessonDto)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/courses/" + courseId + "/structure"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(courseId))
+                .andExpect(jsonPath("$.modules.length()").value(1))
+                .andExpect(jsonPath("$.modules[0].title").value("Модуль структуры"))
+                .andExpect(jsonPath("$.modules[0].lessons.length()").value(1))
+                .andExpect(jsonPath("$.modules[0].lessons[0].title").value("Урок 1"));
+    }
+
+    /**
+     * Проверка: получение модуля (HTTP 200).
+     */
+    @Test
+    void getModule_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-get-module@test.io");
+        Long categoryId = createCategory("Категория для получения модуля");
+        Long courseId = createCourse(teacherId, categoryId);
+        addModuleToCourse(courseId, "Модуль для чтения", 1);
+        Long moduleId = getModuleIdByCourse(courseId);
+
+        mockMvc.perform(get("/api/modules/" + moduleId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(moduleId))
+                .andExpect(jsonPath("$.title").value("Модуль для чтения"))
+                .andExpect(jsonPath("$.courseId").value(courseId));
+    }
+
+    /**
+     * Проверка: обновление модуля (HTTP 200).
+     */
+    @Test
+    void updateModule_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-update-module@test.io");
+        Long categoryId = createCategory("Категория для обновления модуля");
+        Long courseId = createCourse(teacherId, categoryId);
+        addModuleToCourse(courseId, "Старое название", 1);
+        Long moduleId = getModuleIdByCourse(courseId);
+
+        ModuleRequestDto dto = new ModuleRequestDto();
+        dto.setTitle("Обновлённый модуль");
+        dto.setDescription("Новое описание модуля");
+        dto.setOrderIndex(2);
+
+        mockMvc.perform(put("/api/modules/" + moduleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Обновлённый модуль"))
+                .andExpect(jsonPath("$.orderIndex").value(2));
+    }
+
+    /**
+     * Проверка: удаление модуля (HTTP 204).
+     */
+    @Test
+    void deleteModule_shouldReturn204() throws Exception {
+        Long teacherId = createTeacher("teacher-delete-module@test.io");
+        Long categoryId = createCategory("Категория для удаления модуля");
+        Long courseId = createCourse(teacherId, categoryId);
+        addModuleToCourse(courseId, "Удаляемый модуль", 1);
+        Long moduleId = getModuleIdByCourse(courseId);
+
+        mockMvc.perform(delete("/api/modules/" + moduleId))
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * Проверка: создание урока (HTTP 201).
+     */
+    @Test
+    void addLesson_shouldReturn201() throws Exception {
+        Long teacherId = createTeacher("teacher-lesson@test.io");
+        Long categoryId = createCategory("Категория для урока");
+        Long courseId = createCourse(teacherId, categoryId);
+        addModuleToCourse(courseId, "Модуль для урока", 1);
+        Long moduleId = getModuleIdByCourse(courseId);
+
+        LessonRequestDto dto = new LessonRequestDto();
+        dto.setTitle("Новый урок");
+        dto.setContent("Содержание урока");
+        dto.setVideoUrl("http://example.com/video.mp4");
+
+        MvcResult result = mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.title").value("Новый урок"))
+                .andReturn();
+
+        com.studying.platform.dto.LessonResponseDto response = objectMapper.readValue(
+                result.getResponse().getContentAsString(),
+                com.studying.platform.dto.LessonResponseDto.class);
+        assertNotNull(response.getId());
+    }
+
+    /**
+     * Проверка: получение урока (HTTP 200).
+     */
+    @Test
+    void getLesson_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-get-lesson@test.io");
+        Long categoryId = createCategory("Категория для получения урока");
+        Long courseId = createCourse(teacherId, categoryId);
+        Long moduleId = addModuleToCourseAndReturnId(courseId, "Модуль", 1);
+        Long lessonId = addLessonToModuleAndReturnId(moduleId, "Урок для чтения", "Содержание", "http://example.com/v");
+
+        mockMvc.perform(get("/api/lessons/" + lessonId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(lessonId))
+                .andExpect(jsonPath("$.title").value("Урок для чтения"))
+                .andExpect(jsonPath("$.content").value("Содержание"))
+                .andExpect(jsonPath("$.moduleId").value(moduleId));
+    }
+
+    /**
+     * Проверка: обновление урока (HTTP 200).
+     */
+    @Test
+    void updateLesson_shouldReturn200() throws Exception {
+        Long teacherId = createTeacher("teacher-update-lesson@test.io");
+        Long categoryId = createCategory("Категория для обновления урока");
+        Long courseId = createCourse(teacherId, categoryId);
+        Long moduleId = addModuleToCourseAndReturnId(courseId, "Модуль", 1);
+        Long lessonId = addLessonToModuleAndReturnId(moduleId, "Старый урок", "Старое содержание", null);
+
+        LessonRequestDto dto = new LessonRequestDto();
+        dto.setTitle("Обновлённый урок");
+        dto.setContent("Обновлённое содержание");
+        dto.setVideoUrl("http://example.com/new-video");
+
+        mockMvc.perform(put("/api/lessons/" + lessonId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Обновлённый урок"))
+                .andExpect(jsonPath("$.videoUrl").value("http://example.com/new-video"));
+    }
+
+    /**
+     * Проверка: удаление урока (HTTP 204).
+     */
+    @Test
+    void deleteLesson_shouldReturn204() throws Exception {
+        Long teacherId = createTeacher("teacher-delete-lesson@test.io");
+        Long categoryId = createCategory("Категория для удаления урока");
+        Long courseId = createCourse(teacherId, categoryId);
+        Long moduleId = addModuleToCourseAndReturnId(courseId, "Модуль", 1);
+        Long lessonId = addLessonToModuleAndReturnId(moduleId, "Удаляемый урок", "Содержание", null);
+
+        mockMvc.perform(delete("/api/lessons/" + lessonId))
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * Проверка: полный цикл — создание курса, модуля, урока, получение структуры.
+     */
+    @Test
+    void fullCycle_createCourseWithStructure() throws Exception {
+        Long teacherId = createTeacher("teacher-fullcycle@test.io");
+        Long categoryId = createCategory("Категория полного цикла");
+
+        // Создаём курс
+        Long courseId = createCourse(teacherId, categoryId);
+
+        // Добавляем модуль
+        ModuleRequestDto moduleDto = new ModuleRequestDto("Модуль цикла", "Описание", 1);
+        mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(moduleDto)))
+                .andExpect(status().isCreated());
+
+        Long moduleId = getModuleIdByCourse(courseId);
+
+        // Добавляем урок
+        LessonRequestDto lessonDto = new LessonRequestDto("Урок цикла", "Полный контент", "http://example.com");
+        mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(lessonDto)))
+                .andExpect(status().isCreated());
+
+        // Получаем структуру
+        mockMvc.perform(get("/api/courses/" + courseId + "/structure"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.modules[0].lessons[0].title").value("Урок цикла"))
+                .andExpect(jsonPath("$.modules[0].lessons[0].content").value("Полный контент"));
+    }
+
+    // ==================== Негативные сценарии ====================
+
+    /**
+     * Проверка: чтение несуществующего курса (HTTP 404).
+     */
+    @Test
+    void getCourse_notFound_shouldReturn404() throws Exception {
+        mockMvc.perform(get("/api/courses/99999"))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: обновление несуществующего курса (HTTP 404).
+     */
+    @Test
+    void updateCourse_notFound_shouldReturn404() throws Exception {
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Тест");
+        dto.setDescription("Тест");
+        dto.setDuration(10);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(1L);
+        dto.setCategoryId(1L);
+
+        mockMvc.perform(put("/api/courses/99999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: удаление несуществующего курса (HTTP 404).
+     */
+    @Test
+    void deleteCourse_notFound_shouldReturn404() throws Exception {
+        mockMvc.perform(delete("/api/courses/99999"))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: создание курса с пустым названием (HTTP 400).
+     */
+    @Test
+    void createCourse_nullTitle_shouldReturn400() throws Exception {
+        Long teacherId = createTeacher("teacher-validation@test.io");
+        Long categoryId = createCategory("Категория для валидации");
+
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("");
+        dto.setDescription("Описание");
+        dto.setDuration(10);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(teacherId);
+        dto.setCategoryId(categoryId);
+
+        mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: создание курса без преподавателя (HTTP 400).
+     */
+    @Test
+    void createCourse_nullTeacher_shouldReturn400() throws Exception {
+        Long categoryId = createCategory("Категория для валидации учителя");
+
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Курс без учителя");
+        dto.setDescription("Описание");
+        dto.setDuration(10);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(null);
+        dto.setCategoryId(categoryId);
+
+        mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: создание курса с некорректной продолжительностью (HTTP 400).
+     */
+    @Test
+    void createCourse_invalidDuration_shouldReturn400() throws Exception {
+        Long teacherId = createTeacher("teacher-duration@test.io");
+        Long categoryId = createCategory("Категория для валидации duration");
+
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Курс с нулевой продолжительностью");
+        dto.setDescription("Описание");
+        dto.setDuration(0);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(teacherId);
+        dto.setCategoryId(categoryId);
+
+        mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: создание курса с несуществующим преподавателем (HTTP 404).
+     */
+    @Test
+    void createCourse_nonExistentTeacher_shouldReturn404() throws Exception {
+        Long categoryId = createCategory("Категория для несуществующего учителя");
+
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Курс с чужим учителем");
+        dto.setDescription("Описание");
+        dto.setDuration(10);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(99999L);
+        dto.setCategoryId(categoryId);
+
+        mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: создание курса с несуществующей категорией (HTTP 404).
+     */
+    @Test
+    void createCourse_nonExistentCategory_shouldReturn404() throws Exception {
+        Long teacherId = createTeacher("teacher-category@test.io");
+
+        CourseRequestDto dto = new CourseRequestDto();
+        dto.setTitle("Курс с чужой категорией");
+        dto.setDescription("Описание");
+        dto.setDuration(10);
+        dto.setStartDate(LocalDate.of(2026, 1, 1));
+        dto.setTeacherId(teacherId);
+        dto.setCategoryId(99999L);
+
+        mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: удаление курса с записями (HTTP 400).
+     */
+    @Test
+    void deleteCourse_withEnrollments_shouldReturn400() throws Exception {
+        Long teacherId = createTeacher("teacher-enroll@test.io");
+        Long studentId = createUser("student-enroll@test.io", UserRole.STUDENT);
+        Long categoryId = createCategory("Категория для записей");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        // Записываем студента на курс
+        transactions.executeWithoutResult(status -> {
+            jdbcTemplate.update("insert into enrollments (user_id, course_id, enroll_date, status) values (?, ?, ?, ?)",
+                    studentId, courseId, LocalDate.now(), "ACTIVE");
+        });
+
+        mockMvc.perform(delete("/api/courses/" + courseId))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: добавление модуля к несуществующему курсу (HTTP 404).
+     */
+    @Test
+    void addModule_nonExistentCourse_shouldReturn404() throws Exception {
+        ModuleRequestDto dto = new ModuleRequestDto("Модуль", "Описание", 1);
+
+        mockMvc.perform(post("/api/courses/99999/modules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: получение несуществующего модуля (HTTP 404).
+     */
+    @Test
+    void getModule_notFound_shouldReturn404() throws Exception {
+        mockMvc.perform(get("/api/modules/99999"))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: получение несуществующего урока (HTTP 404).
+     */
+    @Test
+    void getLesson_notFound_shouldReturn404() throws Exception {
+        mockMvc.perform(get("/api/lessons/99999"))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверка: создание курса с пустым телом (HTTP 400).
+     */
+    @Test
+    void createCourse_emptyBody_shouldReturn400() throws Exception {
+        mockMvc.perform(post("/api/courses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: создание модуля с пустым названием (HTTP 400).
+     */
+    @Test
+    void createModule_nullTitle_shouldReturn400() throws Exception {
+        Long teacherId = createTeacher("teacher-module-title@test.io");
+        Long categoryId = createCategory("Категория для названия модуля");
+        Long courseId = createCourse(teacherId, categoryId);
+
+        ModuleRequestDto dto = new ModuleRequestDto();
+        dto.setTitle("");
+        dto.setDescription("Описание");
+        dto.setOrderIndex(1);
+
+        mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: создание урока с пустым названием (HTTP 400).
+     */
+    @Test
+    void createLesson_nullTitle_shouldReturn400() throws Exception {
+        Long teacherId = createTeacher("teacher-lesson-title@test.io");
+        Long categoryId = createCategory("Категория для названия урока");
+        Long courseId = createCourse(teacherId, categoryId);
+        Long moduleId = addModuleToCourseAndReturnId(courseId, "Модуль", 1);
+
+        LessonRequestDto dto = new LessonRequestDto();
+        dto.setTitle("");
+        dto.setContent("Содержание");
+        dto.setVideoUrl(null);
+
+        mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Проверка: формат ошибки 404 при чтении несуществующего курса.
+     */
+    @Test
+    void errorResponseFormat_course_shouldHaveRequiredFields() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/courses/99999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.path").isNotEmpty())
+                .andReturn();
+
+        ErrorResponseDto errorResponse = objectMapper.readValue(
+                result.getResponse().getContentAsString(), ErrorResponseDto.class);
+
+        assertNotNull(errorResponse.getTimestamp());
+        assertEquals(404, errorResponse.getStatus());
+        assertEquals("Not Found", errorResponse.getError());
+        assertNotNull(errorResponse.getMessage());
+        assertNotNull(errorResponse.getPath());
+    }
+
+    // ==================== Вспомогательные методы ====================
+
+    /**
+     * Добавляет модуль к курсу и возвращает его ID.
+     */
+    private Long addModuleToCourse(Long courseId, String title, int orderIndex) throws Exception {
+        ModuleRequestDto dto = new ModuleRequestDto(title, "Описание", orderIndex);
+        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        com.studying.platform.dto.ModuleResponseDto response = objectMapper.readValue(
+                result.getResponse().getContentAsString(),
+                com.studying.platform.dto.ModuleResponseDto.class);
+        return response.getId();
+    }
+
+    /**
+     * Добавляет модуль к курсу, возвращает ID модуля.
+     */
+    private Long addModuleToCourseAndReturnId(Long courseId, String title, int orderIndex) throws Exception {
+        return addModuleToCourse(courseId, title, orderIndex);
+    }
+
+    /**
+     * Добавляет урок к модулю и возвращает его ID.
+     */
+    private Long addLessonToModuleAndReturnId(Long moduleId, String title, String content, String videoUrl) throws Exception {
+        LessonRequestDto dto = new LessonRequestDto(title, content, videoUrl);
+        MvcResult result = mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        com.studying.platform.dto.LessonResponseDto response = objectMapper.readValue(
+                result.getResponse().getContentAsString(),
+                com.studying.platform.dto.LessonResponseDto.class);
+        return response.getId();
+    }
+
+    /**
+     * Получает ID первого модуля курса через прямой SQL.
+     */
+    private Long getModuleIdByCourse(Long courseId) throws Exception {
+        return jdbcTemplate.queryForObject("select id from modules where course_id = ? order by id limit 1",
+                Long.class, courseId);
     }
 }

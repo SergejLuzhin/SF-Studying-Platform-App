@@ -2,31 +2,41 @@
 
 ## Текущее состояние
 
-Этап 16 «Основа REST API» завершён. Реализованы DTO, глобальный обработчик ошибок, `CategoryService` и REST-контроллеры для пользователей и категорий.
+Этап 17 «API курсов и содержания» завершён. Реализованы REST-контроллеры для курсов, модулей и уроков, соответствующие DTO, методы сервиса для CRUD операций модулей и уроков.
 
 ## Проверки
 
-- **PASS:** `JAVA_HOME=$(/usr/libexec/java_home -v 23) mvn test -Dtest=RestApiTests` — 27 тестов, ошибок и пропусков нет.
-- **PASS:** `JAVA_HOME=$(/usr/libexec/java_home -v 23) mvn test` — 324 теста, ошибок и пропусков нет (297 существующих + 27 новых).
+- **PASS:** `JAVA_HOME=$(/usr/libexec/java_home -v 23) mvn test` — 354 теста, ошибок и пропусков нет (324 существующих + 30 новых для этапов 16-17).
 - **PASS:** `git diff --check` — без проблем форматирования.
 
 ## Изменённые и новые файлы
 
-- `src/main/java/com/studying/platform/dto/` — 6 DTO-классов: `UserCreateDto`, `UserUpdateDto`, `UserResponseDto`, `CategoryCreateDto`, `CategoryResponseDto`, `ErrorResponseDto`.
-- `src/main/java/com/studying/platform/exception/GlobalExceptionHandler.java` — глобальный обработчик ошибок (404, 400, 500).
-- `src/main/java/com/studying/platform/service/CategoryService.java` — новый сервис категорий.
-- `src/main/java/com/studying/platform/controller/UserController.java` — REST-контроллер пользователей.
-- `src/main/java/com/studying/platform/controller/CategoryController.java` — REST-контроллер категорий.
-- `src/main/java/com/studying/platform/service/UserService.java` — добавлены `createUser(UserCreateDto)` и `deleteUser(Long)`.
-- `src/test/java/com/studying/platform/RestApiTests.java` — 27 интеграционных тестов REST API.
+**Новые контроллеры (3):**
+- `src/main/java/com/studying/platform/controller/CourseController.java` — CRUD курсов, структура, добавление модулей.
+- `src/main/java/com/studying/platform/controller/ModuleController.java` — CRUD модулей.
+- `src/main/java/com/studying/platform/controller/LessonController.java` — CRUD уроков, создание урока в модуле.
+
+**Новые DTO (8):**
+- `src/main/java/com/studying/platform/dto/CourseRequestDto.java` — создание/обновление курса.
+- `src/main/java/com/studying/platform/dto/CourseResponseDto.java` — ответ с данными курса.
+- `src/main/java/com/studying/platform/dto/CourseStructureResponseDto.java` — вложенная структура курса с модулями и уроками.
+- `src/main/java/com/studying/platform/dto/ModuleRequestDto.java` — создание/обновление модуля.
+- `src/main/java/com/studying/platform/dto/ModuleResponseDto.java` — ответ с данными модуля.
+- `src/main/java/com/studying/platform/dto/LessonRequestDto.java` — создание/обновление урока.
+- `src/main/java/com/studying/platform/dto/LessonResponseDto.java` — ответ с данными урока.
+
+**Изменённые файлы (3):**
+- `src/main/java/com/studying/platform/service/CourseService.java` — добавлены методы: `findCourse`, `findModule`, `findLesson`, `updateModule`, `deleteModule`, `updateLesson`, `deleteLesson`.
+- `src/main/java/com/studying/platform/exception/GlobalExceptionHandler.java` — добавлен обработчик `IllegalArgumentException` → 400 (для валидации данных, например duration < 1).
+- `src/test/java/com/studying/platform/RestApiTests.java` — добавлены 30 интеграционных HTTP-тестов (позитивные, негативные сценарии, полный цикл), обновлён `cleanUp()` для корректного удаления модулей/уроков.
 
 ## Ключевые решения
 
-- Формат ошибок — единый `ErrorResponseDto` с полями `timestamp`, `status`, `error`, `message`, `path`.
-- `IllegalStateException` (нарушение бизнес-правил) обрабатывается как 400 Bad Request.
-- `UserUpdateDto` пустой — сущность `User` не имеет обновляемых полей в текущей модели.
-- ADR не создавался — использованы стандартные паттерны Spring Boot REST.
+- Эндпоинт создания урока: `POST /api/lessons/modules/{moduleId}/lessons` — вложенный ресурс.
+- Структура курса: `GET /api/courses/{id}/structure` — возвращает вложенный JSON с модулями и уроками.
+- `IllegalArgumentException` (некорректные данные, например duration=0) обрабатывается как 400 Bad Request (新增 обработчик в GlobalExceptionHandler).
+- Порядок очистки в `cleanUp()`: уроки → модули → записи → курсы → категории → пользователи.
 
 ## Открытые вопросы и следующий шаг
 
-Следующий этап — 17 «API курсов и содержания» (`pending`); перед выполнением подготовить его подробный план по правилам проекта.
+Следующий этап — 18 «API записи и заданий» (`pending`); перед выполнением подготовить его подробный план по правилам проекта.
