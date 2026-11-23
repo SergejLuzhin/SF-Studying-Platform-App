@@ -94,7 +94,8 @@ class PostgresSchemaTests {
                 "users", "profiles", "categories", "courses",
                 "modules", "lessons", "enrollments",
                 "tags", "course_reviews", "course_tag",
-                "assignments", "submissions"
+                "assignments", "submissions",
+                "quiz", "question", "answeroption"
         };
 
         try (Connection connection = dataSource.getConnection()) {
@@ -142,6 +143,9 @@ class PostgresSchemaTests {
         expectedPks.put("course_tag", Set.of("course_id", "tag_id"));
         expectedPks.put("assignments", Set.of("id"));
         expectedPks.put("submissions", Set.of("id"));
+        expectedPks.put("quiz", Set.of("id"));
+        expectedPks.put("question", Set.of("id"));
+        expectedPks.put("answeroption", Set.of("id"));
 
         try (Connection connection = dataSource.getConnection()) {
             String schema = currentSchema(connection);
@@ -195,7 +199,10 @@ class PostgresSchemaTests {
                 {"course_tag", "tag_id", "tags", "id"},
                 {"assignments", "lesson_id", "lessons", "id"},
                 {"submissions", "assignment_id", "assignments", "id"},
-                {"submissions", "student_id", "users", "id"}
+                {"submissions", "student_id", "users", "id"},
+                {"quiz", "module_id", "modules", "id"},
+                {"question", "quiz_id", "quiz", "id"},
+                {"answeroption", "question_id", "question", "id"}
         };
 
         try (Connection connection = dataSource.getConnection()) {
@@ -296,6 +303,7 @@ class PostgresSchemaTests {
             expectedConstraints.put("enrollments", List.of("user_id", "course_id"));
             expectedConstraints.put("course_reviews", List.of("student_id", "course_id"));
             expectedConstraints.put("submissions", List.of("assignment_id", "student_id"));
+            expectedConstraints.put("quiz", List.of("module_id"));
 
             // Проверяем каждое ожидаемое ограничение
             for (Map.Entry<String, List<String>> entry : expectedConstraints.entrySet()) {
@@ -312,7 +320,7 @@ class PostgresSchemaTests {
 
             // Проверяем отсутствие ограничений на непредусмотренных таблицах
             Set<String> expectedTables = Set.of("users", "profiles", "tags", "categories",
-                    "enrollments", "course_reviews", "submissions");
+                    "enrollments", "course_reviews", "submissions", "quiz");
             for (String actualTable : actualByTable.keySet()) {
                 assertTrue(expectedTables.contains(actualTable),
                         "Неожиданная таблица с уникальным ограничением «" + actualTable +

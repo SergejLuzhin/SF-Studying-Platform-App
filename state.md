@@ -2,29 +2,26 @@
 
 ## Текущий этап
 
-Следующий этап — 12 «Структура тестов» (`pending`).
+Следующий этап — 13 «Прохождение тестов» (`pending`).
 
 ## Последние изменения
 
-### Этап 11. Проверка работ (completed)
+### Этап 12. Структура тестов (completed)
 
-- Добавлено поле `UserRepository` в `SubmissionService` и обновлён конструктор.
-- Реализован метод `gradeSubmission(submissionId, score, feedback, teacherId)`:
-  - Проверка существования решения и преподавателя.
-  - Валидация диапазона: `0 ≤ score ≤ maxScore` задания (при `maxScore == null` — только `score ≥ 0`).
-  - Обновление полей `score` и `feedback` решения.
-- Реализованы методы получения списков:
-  - `getSubmissionsByAssignment(assignmentId)` — с проверкой существования задания.
-  - `getSubmissionsByStudent(studentId)` — с проверкой существования студента.
-- Добавлено 13 интеграционных тестов в `SubmissionTests.java` (5 позитивных + 2 выборки списков + 6 негативных сценариев).
+- Созданы сущности JPA: `Quiz`, `Question`, `AnswerOption`.
+  - `Quiz` — `@OneToOne` к `Module` (уникально, владелец связи), `@OneToMany` на `Question` (PERSIST, LAZY).
+  - `Question` — `@ManyToOne` к `Quiz`, `@OneToMany` на `AnswerOption` (PERSIST, LAZY). Поддержка `SINGLE_CHOICE` и `MULTIPLE_CHOICE` (несколько правильных вариантов).
+  - `AnswerOption` — `@ManyToOne` к `Question`. Поле `isCorrect` определяет правильность.
+- Создан enum `QuizQuestionType` (`SINGLE_CHOICE`, `MULTIPLE_CHOICE`).
+- Созданы репозитории: `QuizRepository` (с методом `findByModuleId`), `QuestionRepository`, `AnswerOptionRepository`.
+- Добавлены интеграционные тесты в `QuizStructureTest.java` (14 тестов): каскадное сохранение, поиск по ID модуля/викторины/вопроса, типы вопросов, ограничения уникальности и NOT NULL.
+- Обновлены `PostgresSchemaTests`: добавлены новые таблицы (`quiz`, `question`, `answeroption`), внешние ключи и уникальные ограничения для `quiz.module_id`.
 
 ## Проверки
 
-- **PASS:** компиляция проекта и тестов (`mvn compile test-compile`).
+- **PASS:** компиляция проекта и тестов (`mvn clean compile test-compile`).
 - **PASS:** `git diff --check` — без ошибок форматирования.
-- **PASS:** полный прогон всех тестов: 195 тестов, 0 ошибок, 0 пропусков.
-- **PASS:** независимая проверка этапа 11 субагентом `stage-tester`.
-- Для повторного запуска на отдельной базе: `JAVA_HOME=$(/usr/libexec/java_home -v 23) mvn verify -Dspring.datasource.url=jdbc:postgresql://localhost:5432/platform_test`. Без этого параметра тестовый профиль использует Testcontainers. Тестовая схема работает с `create-drop`; важные данные в ней хранить нельзя.
+- **PASS:** полный прогон всех тестов: 209 тестов, 0 ошибок, 0 пропусков.
 
 ## База данных
 
