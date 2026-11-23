@@ -15,7 +15,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * каскадных операций JPA и корректную работу вне транзакции теста.
  * </p>
  * <p>
- * Порядок удаления: отзывы → записи → уроки → модули → курсы → категории → пользователи.
+ * Порядок удаления: решения → отзывы → записи → уроки → модули → курсы → категории → пользователи.
  * Пользователи удаляются только по явно переданным идентификаторам.
  * Для записей на курс удаление производится по ID курсов
  * и email пользователей, что позволяет удалять записи,
@@ -36,7 +36,7 @@ class TestDataCleanupHelper {
      * Очищает тестовые данные в порядке зависимостей.
      * <p>
      * Удаляет созданные тестовые данные в обратном порядке зависимостей:
-     * отзывы, записи, уроки, модули, курсы, категории и пользователи.
+     * решения, отзывы, записи, уроки, модули, курсы, категории и пользователи.
      * Пользователи удаляются только по явно переданным идентификаторам.
      * Для записей на курс удаление производится по ID курсов
      * и email пользователей, что позволяет удалять записи,
@@ -49,6 +49,7 @@ class TestDataCleanupHelper {
      *
      * @param entityManager менеджер сущностей для выполнения JPQL-удалений
      * @param transactionTemplate шаблон транзакции для оборачивания очистки
+     * @param submissionIds идентификаторы решений
      * @param reviewCourseIds идентификаторы курсов, на которых оставлены отзывы
      * @param enrollmentCourseIds идентификаторы курсов, на которых есть записи
      * @param enrollmentUserEmails email пользователей с записями
@@ -61,6 +62,7 @@ class TestDataCleanupHelper {
     void clearTestEntities(
             EntityManager entityManager,
             TransactionTemplate transactionTemplate,
+            Set<Long> submissionIds,
             Set<Long> reviewCourseIds,
             Set<Long> enrollmentCourseIds,
             Set<String> enrollmentUserEmails,
@@ -71,6 +73,13 @@ class TestDataCleanupHelper {
             Set<Long> userIds) {
 
         transactionTemplate.executeWithoutResult(status -> {
+            // 0. Удаляем решения (зависят от assignment → lesson → module → course)
+            if (submissionIds != null && !submissionIds.isEmpty()) {
+                entityManager.createQuery("DELETE FROM Submission s WHERE s.id IN (:ids)")
+                        .setParameter("ids", submissionIds)
+                        .executeUpdate();
+            }
+
             // 1. Удаляем отзывы о курсах (зависят от course)
             if (reviewCourseIds != null && !reviewCourseIds.isEmpty()) {
                 entityManager.createQuery("DELETE FROM CourseReview cr WHERE cr.course.id IN (:ids)")

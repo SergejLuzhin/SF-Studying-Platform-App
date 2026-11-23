@@ -117,6 +117,7 @@ class TestDataCleanupHelperTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(), // submissionIds
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                 Set.of(trackedId),
                 Set.of()
@@ -143,6 +144,7 @@ class TestDataCleanupHelperTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(), // submissionIds
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                 Set.of(trackedUser.getId())
         );
@@ -170,6 +172,7 @@ class TestDataCleanupHelperTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(), // submissionIds
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                 Set.of(99999L), // другой ID
                 Set.of()
@@ -199,6 +202,7 @@ class TestDataCleanupHelperTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(), // submissionIds
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                 Set.of(99999L)
         );
@@ -222,6 +226,7 @@ class TestDataCleanupHelperTests {
         Long otherId = other.getId();
 
         cleanupHelper.clearTestEntities(entityManager, transactionTemplate,
+                Set.of(), // submissionIds
                 Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(trackedId));
         entityManager.clear();
 
@@ -241,6 +246,7 @@ class TestDataCleanupHelperTests {
                 cleanupHelper.clearTestEntities(
                         entityManager,
                         transactionTemplate,
+                        Set.of(), // submissionIds
                         Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                         Set.of()
                 ),
@@ -289,6 +295,7 @@ class TestDataCleanupHelperTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(),       // submissionIds
                 Set.of(),       // reviewCourseIds
                 Set.of(),       // enrollmentCourseIds — записей нет
                 Set.of(),       // enrollmentUserEmails

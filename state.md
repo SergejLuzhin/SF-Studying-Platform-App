@@ -2,25 +2,26 @@
 
 ## Текущий этап
 
-Следующий этап — 10 «Сдача решений» (`pending`). Перед выполнением создать подробный план `stages/stage-10.md` по правилам проекта.
+Следующий этап — 11 «Проверка работ» (`pending`).
 
 ## Последние изменения
 
-- Реализована сущность `Assignment` (Задание) с полями: id, lesson (FK), title, description (TEXT без @Lob), dueDate, maxScore.
-- Добавлена связь `@OneToMany` в `Lesson` для коллекции `assignments` (`fetch = LAZY`, без каскадов — безопасно для этапа 10).
-- Создан `AssignmentRepository` с методом `findByLessonId(Long lessonId)`.
-- В `CourseService` добавлены методы: `createAssignment`, `updateAssignment`, `deleteAssignment`, `getAssignmentsByLessonId`.
-- Обновлены проверки схемы PostgreSQL: таблица `assignments`, PK `{id}`, FK `lesson_id -> lessons.id`.
-- Созданы 11 интеграционных тестов `AssignmentServiceTests` (CRUD, ограничения, TEXT-поле, каскады).
-- Исправлена ошибка в `CourseManagementTests` — добавлен `AssignmentRepository` в конструктор `CourseService`.
-- Исправлен тест `testTextStorageViaJpaAndSql` — заменён прямой `Connection` на `JdbcTemplate` для работы в транзакции `@DataJpaTest`.
+- Реализована сущность `Submission` (Решение) с полями: id, assignment (ManyToOne LAZY), student (ManyToOne LAZY), submittedAt, content (TEXT без @Lob), score (Integer, nullable), feedback (String, nullable).
+- Добавлен составной уникальный constraint `UNIQUE(assignment_id, student_id)` на уровне БД.
+- Добавлена связь `@OneToMany submissions` в `Assignment` (fetch = LAZY, без каскадов).
+- Создан `SubmissionRepository` с методами: `findByAssignmentId`, `findByStudentId`, `findByAssignmentIdAndStudentId`.
+- Создан `SubmissionService.submitSolution()` с проверками: существование задания, запись студента на курс (ACTIVE), отсутствие повторного решения.
+- Созданы 17 интеграционных тестов `SubmissionTests` (7 позитивных, 10 негативных).
+- Обновлён `PostgresSchemaTests`: добавлена таблица `submissions`, PK {id}, 2 FK, UNIQUE {assignment_id, student_id}.
+- Обновлён `TestDataCleanupHelper`: добавлена поддержка удаления `Submission` (первый шаг очистки).
+- Обновлены все вызовы `clearTestEntities` в существующих тестах.
 
 ## Проверки
 
 - **PASS:** компиляция проекта и тестов (`mvn compile test-compile`).
 - **PASS:** `git diff --check` — без ошибок форматирования.
-- **PASS:** полный прогон всех тестов: 165 тестов, 0 ошибок, 0 пропусков.
-- **PASS:** `AssignmentServiceTests` — 11 тестов, 0 ошибок.
+- **PASS:** полный прогон всех тестов: 182 теста, 0 ошибок, 0 пропусков.
+- **PASS:** `SubmissionTests` — 17 тестов, 0 ошибок.
 - **PASS:** `PostgresSchemaTests` — 16 тестов, 0 ошибок.
 - Для повторного запуска на отдельной базе: `JAVA_HOME=$(/usr/libexec/java_home -v 23) mvn verify -Dspring.datasource.url=jdbc:postgresql://localhost:5432/platform_test`. Без этого параметра тестовый профиль использует Testcontainers. Тестовая схема работает с `create-drop`; важные данные в ней хранить нельзя.
 

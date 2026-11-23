@@ -9,9 +9,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Сущность «Задание» учебной платформы.
@@ -69,6 +72,15 @@ public class Assignment {
      */
     @Column(name = "max_score")
     private Integer maxScore;
+
+    /**
+     * Решения, отправленные студентами на данное задание.
+     * Загружаются лениво. Владелец обратной связи — сущность {@link Submission}.
+     * Каскады не настроены — сохранённые решения не должны удаляться
+     * при удалении задания.
+     */
+    @OneToMany(mappedBy = "assignment", fetch = FetchType.LAZY)
+    private Set<Submission> submissions = new HashSet<>();
 
     /**
      * Публичный конструктор по умолчанию, требуемый JPA-провайдером.
@@ -200,5 +212,23 @@ public class Assignment {
      */
     public void setMaxScore(Integer maxScore) {
         this.maxScore = maxScore;
+    }
+
+    /**
+     * Возвращает коллекцию решений, отправленных студентами на данное задание.
+     *
+     * @return коллекция решений
+     */
+    public Set<Submission> getSubmissions() {
+        return submissions;
+    }
+
+    /**
+     * Устанавливает коллекцию решений, отправленных студентами на данное задание.
+     *
+     * @param submissions коллекция решений
+     */
+    public void setSubmissions(Set<Submission> submissions) {
+        this.submissions = submissions;
     }
 }

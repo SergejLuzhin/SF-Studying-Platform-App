@@ -158,6 +158,7 @@ class MvpFlowTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(),       // submissionIds — решения не создаются
                 Set.of(),       // reviewCourseIds — отзывы не создаются
                 courseId != null ? Set.of(courseId) : Set.of(),
                 Set.of(),       // enrollmentUserEmails — записи удаляются по course ID
@@ -442,6 +443,7 @@ class MvpFlowTests {
             assertTrue(userRepository.findById(studentId).isEmpty());
         } finally {
             cleanupHelper.clearTestEntities(entityManager, transactionTemplate,
+                    Set.of(), // submissionIds
                     Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of(),
                     Set.of(prestigeCategoryId), Set.of(prestigeUserId));
         }

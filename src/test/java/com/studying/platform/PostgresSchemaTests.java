@@ -82,7 +82,7 @@ class PostgresSchemaTests {
      * Проверяет наличие всех реализованных таблиц в схеме.
      * <p>
      * Ожидаемые таблицы: users, profiles, categories, courses, modules,
-     * lessons, enrollments, tags, course_reviews, course_tag, assignments.
+     * lessons, enrollments, tags, course_reviews, course_tag, assignments, submissions.
      * </p>
      *
      * @param dataSource автоматически настроенный Spring DataSource
@@ -94,7 +94,7 @@ class PostgresSchemaTests {
                 "users", "profiles", "categories", "courses",
                 "modules", "lessons", "enrollments",
                 "tags", "course_reviews", "course_tag",
-                "assignments"
+                "assignments", "submissions"
         };
 
         try (Connection connection = dataSource.getConnection()) {
@@ -141,6 +141,7 @@ class PostgresSchemaTests {
         expectedPks.put("course_reviews", Set.of("id"));
         expectedPks.put("course_tag", Set.of("course_id", "tag_id"));
         expectedPks.put("assignments", Set.of("id"));
+        expectedPks.put("submissions", Set.of("id"));
 
         try (Connection connection = dataSource.getConnection()) {
             String schema = currentSchema(connection);
@@ -192,7 +193,9 @@ class PostgresSchemaTests {
                 {"course_reviews", "student_id", "users", "id"},
                 {"course_tag", "course_id", "courses", "id"},
                 {"course_tag", "tag_id", "tags", "id"},
-                {"assignments", "lesson_id", "lessons", "id"}
+                {"assignments", "lesson_id", "lessons", "id"},
+                {"submissions", "assignment_id", "assignments", "id"},
+                {"submissions", "student_id", "users", "id"}
         };
 
         try (Connection connection = dataSource.getConnection()) {
@@ -292,6 +295,7 @@ class PostgresSchemaTests {
             expectedConstraints.put("categories", List.of("name"));
             expectedConstraints.put("enrollments", List.of("user_id", "course_id"));
             expectedConstraints.put("course_reviews", List.of("student_id", "course_id"));
+            expectedConstraints.put("submissions", List.of("assignment_id", "student_id"));
 
             // Проверяем каждое ожидаемое ограничение
             for (Map.Entry<String, List<String>> entry : expectedConstraints.entrySet()) {
@@ -308,7 +312,7 @@ class PostgresSchemaTests {
 
             // Проверяем отсутствие ограничений на непредусмотренных таблицах
             Set<String> expectedTables = Set.of("users", "profiles", "tags", "categories",
-                    "enrollments", "course_reviews");
+                    "enrollments", "course_reviews", "submissions");
             for (String actualTable : actualByTable.keySet()) {
                 assertTrue(expectedTables.contains(actualTable),
                         "Неожиданная таблица с уникальным ограничением «" + actualTable +

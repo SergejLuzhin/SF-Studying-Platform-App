@@ -179,6 +179,7 @@ class CourseServiceTransactionTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(),       // submissionIds
                 Set.of(),       // reviewCourseIds — отзывы не создаются
                 courseId != null ? Set.of(courseId) : Set.of(),
                 Set.of(),       // enrollmentUserEmails — записи не создаются

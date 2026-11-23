@@ -138,6 +138,7 @@ class EnrollmentServiceTransactionTests {
         cleanupHelper.clearTestEntities(
                 entityManager,
                 transactionTemplate,
+                Set.of(),       // submissionIds — решения не создаются
                 Set.of(),       // reviewCourseIds — отзывы не создаются
                 courseId != null ? Set.of(courseId) : Set.of(),
                 Set.of(),       // enrollmentUserEmails — записи удаляются по course ID
