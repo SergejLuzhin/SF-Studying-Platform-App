@@ -78,9 +78,9 @@ public class Submission {
     private Integer score;
 
     /**
-     * Комментарий преподавателя к решению. Необязательно.
+     * Комментарий преподавателя к решению. Необязателен, хранится как TEXT без {@code @Lob}.
      */
-    @Column
+    @Column(name = "feedback", columnDefinition = "TEXT")
     private String feedback;
 
     /**

@@ -37,8 +37,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * Интеграционные тесты для проверки корректности хранения текстовых полей в PostgreSQL.
  * <p>
  * Проверяют, что текстовые поля {@code Course.description}, {@code Module.description},
- * {@code Lesson.content}, {@code Profile.bio} и {@code CourseReview.comment}
- * хранятся в колонках типа TEXT как исходные строки, а не как OID Large Object.
+ * {@code Lesson.content}, {@code Profile.bio} и {@code CourseReview.comment},
+ * а также тип и nullable-семантику колонки {@code Submission.feedback}.
+ * Текстовые значения хранятся в колонках типа TEXT, а не как OID Large Object.
  * Используются тексты с кириллицей, переводами строк и длиной больше 255 символов.
  * </p>
  *
@@ -89,6 +90,16 @@ class PostgresTextStorageTests {
     private final Set<Long> lessonIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Set<Long> profileIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Set<Long> reviewIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Проверяет тип и возможность отсутствия комментария решения в созданной схеме PostgreSQL. */
+    @Test
+    void submissionFeedbackColumnIsNullableText() {
+        var column = jdbcTemplate.queryForMap(
+                "select data_type, is_nullable from information_schema.columns "
+                        + "where table_schema = current_schema() and table_name = 'submissions' and column_name = 'feedback'");
+        assertEquals("text", column.get("data_type"));
+        assertEquals("YES", column.get("is_nullable"));
+    }
 
     /**
      * Выполняет сохранение сущности в транзакции.

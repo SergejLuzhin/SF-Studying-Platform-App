@@ -29,7 +29,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Проверяет оценивание через Spring-сервис и сохранённое состояние вне его транзакции. */
+/** Проверяет оценивание и хранение комментариев через Spring-сервис после завершения транзакции. */
 @SpringBootTest
 @ActiveProfiles("test")
 class SubmissionGradingTransactionTests {
@@ -133,6 +133,28 @@ class SubmissionGradingTransactionTests {
         transactions.executeWithoutResult(status -> em.find(Assignment.class, assignmentId).setMaxScore(null));
         service.gradeSubmission(submissionId, 1000, "Без ограничения", teacherId);
         assertGrade(1000, "Без ограничения");
+    }
+
+    /** Проверяет длинный комментарий, его замену и null через JPA и SQL после подтверждения транзакций. */
+    @Test
+    void longFeedbackPersistsAndCanBeReplacedOrCleared() {
+        String feedback = "Подробный комментарий преподавателя с кириллицей.\n".repeat(12);
+        assertTrue(feedback.length() > 255);
+        service.gradeSubmission(submissionId, 88, feedback, teacherId);
+        assertGrade(88, feedback);
+        assertEquals(feedback, jdbc.queryForObject(
+                "select feedback from submissions where id = ?", String.class, submissionId));
+
+        String replacement = "Исправленный комментарий\n".repeat(15);
+        service.gradeSubmission(submissionId, 95, replacement, teacherId);
+        assertGrade(95, replacement);
+        assertEquals(replacement, jdbc.queryForObject(
+                "select feedback from submissions where id = ?", String.class, submissionId));
+
+        service.gradeSubmission(submissionId, 100, null, teacherId);
+        assertGrade(100, null);
+        assertNull(jdbc.queryForObject(
+                "select feedback from submissions where id = ?", String.class, submissionId));
     }
 
     /** Проверяет ошибку для отсутствующего решения без изменения существующего. */
