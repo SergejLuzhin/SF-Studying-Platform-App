@@ -640,12 +640,14 @@ class RestApiTests {
     }
 
     /**
-     * Проверка: обновление курса (HTTP 200).
+     * Проверяет полное обновление курса, включая преподавателя и категорию, через HTTP и БД.
      */
     @Test
     void updateCourse_shouldReturn200() throws Exception {
         Long teacherId = createTeacher("teacher-update@test.io");
+        Long newTeacherId = createTeacher("teacher-update-new@test.io");
         Long categoryId = createCategory("Категория для обновления");
+        Long newCategoryId = createCategory("Новая категория для обновления");
         Long courseId = createCourse(teacherId, categoryId);
 
         CourseRequestDto dto = new CourseRequestDto();
@@ -653,8 +655,8 @@ class RestApiTests {
         dto.setDescription("Новое описание");
         dto.setDuration(60);
         dto.setStartDate(LocalDate.of(2026, 6, 1));
-        dto.setTeacherId(teacherId);
-        dto.setCategoryId(categoryId);
+        dto.setTeacherId(newTeacherId);
+        dto.setCategoryId(newCategoryId);
 
         perform(put("/api/courses/" + courseId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -662,7 +664,98 @@ class RestApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Обновлённый курс"))
                 .andExpect(jsonPath("$.description").value("Новое описание"))
-                .andExpect(jsonPath("$.duration").value(60));
+                .andExpect(jsonPath("$.duration").value(60))
+                .andExpect(jsonPath("$.startDate").value("2026-06-01"))
+                .andExpect(jsonPath("$.teacherId").value(newTeacherId))
+                .andExpect(jsonPath("$.categoryId").value(newCategoryId))
+                .andExpect(jsonPath("$.categoryName").value("Новая категория для обновления"));
+
+        perform(get("/api/courses/" + courseId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Обновлённый курс"))
+                .andExpect(jsonPath("$.description").value("Новое описание"))
+                .andExpect(jsonPath("$.duration").value(60))
+                .andExpect(jsonPath("$.startDate").value("2026-06-01"))
+                .andExpect(jsonPath("$.teacherId").value(newTeacherId))
+                .andExpect(jsonPath("$.categoryId").value(newCategoryId));
+        transactions.executeWithoutResult(status -> {
+            Map<String, Object> row = courseState(courseId);
+            assertEquals("Обновлённый курс", row.get("title"));
+            assertEquals("Новое описание", row.get("description"));
+            assertEquals(60, row.get("duration"));
+            assertEquals(LocalDate.of(2026, 6, 1), ((java.sql.Date) row.get("start_date")).toLocalDate());
+            assertEquals(newTeacherId, ((Number) row.get("teacher_id")).longValue());
+            assertEquals(newCategoryId, ((Number) row.get("category_id")).longValue());
+        });
+        dto.setDescription(null);
+        perform(put("/api/courses/" + courseId).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.description").isEmpty());
+        perform(get("/api/courses/" + courseId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").isEmpty());
+        transactions.executeWithoutResult(status -> assertNull(courseState(courseId).get("description")));
+    }
+
+    /** Проверяет отклонение ошибочных полных PUT без изменения любых полей курса. */
+    @Test
+    void updateCourse_invalidInput_shouldPreserveCourse() throws Exception {
+        Long teacherId = createTeacher("teacher-update-invalid@test.io");
+        Long studentId = createUser("student-update-invalid@test.io", UserRole.STUDENT);
+        Long categoryId = createCategory("Категория для ошибочного обновления");
+        Long courseId = createCourse(teacherId, categoryId);
+        Map<String, Object> original = transactions.execute(status -> courseState(courseId));
+        var initial = objectMapper.readTree(perform(get("/api/courses/" + courseId))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        Map<String, Object> valid = new java.util.HashMap<>(Map.of(
+                "title", "Другое название", "description", "Другое описание", "duration", 20,
+                "startDate", "2027-03-01", "teacherId", teacherId, "categoryId", categoryId));
+        for (String field : java.util.List.of("teacherId", "categoryId", "duration")) {
+            Map<String, Object> body = new java.util.HashMap<>(valid);
+            body.put(field, field.equals("duration") ? 0 : 999999999L);
+            assertRejectedCourseUpdate(courseId, body, original, initial, field.equals("duration") ? 400 : 404);
+        }
+        Map<String, Object> wrongRole = new java.util.HashMap<>(valid);
+        wrongRole.put("teacherId", studentId);
+        assertRejectedCourseUpdate(courseId, wrongRole, original, initial, 404);
+        Map<String, Object> negativeDuration = new java.util.HashMap<>(valid);
+        negativeDuration.put("duration", -1);
+        assertRejectedCourseUpdate(courseId, negativeDuration, original, initial, 400);
+        for (String field : java.util.List.of("title", "duration", "startDate", "teacherId", "categoryId")) {
+            Map<String, Object> body = new java.util.HashMap<>(valid);
+            body.remove(field);
+            assertRejectedCourseUpdate(courseId, body, original, initial, 400);
+        }
+    }
+
+    /**
+     * Проверяет статус ошибочного PUT и неизменность курса через HTTP и новую транзакцию.
+     *
+     * @param courseId идентификатор курса
+     * @param body тело ошибочного запроса
+     * @param original исходное состояние базы
+     * @param initial исходный HTTP-ответ
+     * @param expectedStatus ожидаемый HTTP-статус
+     * @throws Exception если запрос или проверка не выполнены
+     */
+    private void assertRejectedCourseUpdate(Long courseId, Map<String, Object> body,
+                                            Map<String, Object> original,
+                                            com.fasterxml.jackson.databind.JsonNode initial,
+                                            int expectedStatus) throws Exception {
+        perform(put("/api/courses/" + courseId).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body))).andExpect(status().is(expectedStatus));
+        var after = objectMapper.readTree(perform(get("/api/courses/" + courseId))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(initial, after);
+        assertEquals(original, transactions.execute(status -> courseState(courseId)));
+    }
+
+    /**
+     * Читает сохраняемые поля курса для проверки в транзакции вызывающего кода.
+     *
+     * @param courseId идентификатор курса
+     * @return значения полей курса из PostgreSQL
+     */
+    private Map<String, Object> courseState(Long courseId) {
+        return jdbcTemplate.queryForMap("select title, description, duration, start_date, teacher_id, category_id from courses where id = ?", courseId);
     }
 
     /**

@@ -312,6 +312,49 @@ public class CourseService {
     }
 
     /**
+     * Полностью обновляет поля курса и его связи в одной транзакции.
+     * До изменения сущности проверяет длительность, существование курса,
+     * преподавателя и категории, а также роль преподавателя.
+     *
+     * @param courseId идентификатор курса
+     * @param title новое название
+     * @param description новое описание, допускается {@code null}
+     * @param duration новая положительная длительность в часах
+     * @param startDate новая дата начала
+     * @param teacherId идентификатор нового преподавателя
+     * @param categoryId идентификатор новой категории
+     * @return сохранённый курс
+     * @throws IllegalArgumentException если длительность не положительна
+     * @throws ResourceNotFoundException если курс, преподаватель или категория не найдены
+     *                                   либо пользователь не является преподавателем
+     */
+    public Course updateCourse(Long courseId, String title, String description,
+                               Integer duration, LocalDate startDate, Long teacherId, Long categoryId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Курс с идентификатором " + courseId + " не найден"));
+        validateDuration(duration);
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Преподаватель с идентификатором " + teacherId + " не найден"));
+        if (teacher.getRole() != UserRole.TEACHER) {
+            throw new ResourceNotFoundException(
+                    "Пользователь с идентификатором " + teacherId + " не является преподавателем");
+        }
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Категория с идентификатором " + categoryId + " не найдена"));
+
+        course.setTitle(title);
+        course.setDescription(description);
+        course.setDuration(duration);
+        course.setStartDate(startDate);
+        course.setTeacher(teacher);
+        course.setCategory(category);
+        return courseRepository.save(course);
+    }
+
+    /**
      * Добавляет модуль к существующему курсу.
      * <p>
      * Проверяет существование курса. Создает модуль с заданным названием,

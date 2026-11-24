@@ -106,7 +106,9 @@ public class CourseController {
     /**
      * Обновляет данные существующего курса.
      * <p>
-     * Принимает DTO с не-null полями. Обновляет только указанные поля.
+     * Выполняет полное обновление: обязательны название, длительность, дата начала,
+     * идентификаторы преподавателя и категории; описание может быть {@code null}.
+     * Проверяет роль преподавателя и сохраняет все поля в одной транзакции.
      * </p>
      *
      * @param courseId идентификатор курса
@@ -122,7 +124,9 @@ public class CourseController {
                 dto.getTitle(),
                 dto.getDescription(),
                 dto.getDuration(),
-                dto.getStartDate()
+                dto.getStartDate(),
+                dto.getTeacherId(),
+                dto.getCategoryId()
         );
         CourseResponseDto response = toResponseDto(course);
         return ResponseEntity.ok(response);
