@@ -15,11 +15,13 @@ import jakarta.validation.constraints.Size;
  */
 public class UserUpdateDto {
 
+    /** Обязательный корректный адрес электронной почты. */
     @NotBlank(message = "Адрес электронной почты не может быть пустым")
     @Email(message = "Адрес электронной почты должен быть корректным")
     @Size(max = 50, message = "Адрес электронной почты не должен превышать 50 символов")
     private String email;
 
+    /** Обязательная роль пользователя. */
     @NotNull(message = "Роль пользователя не может быть пустой")
     private UserRole role;
 

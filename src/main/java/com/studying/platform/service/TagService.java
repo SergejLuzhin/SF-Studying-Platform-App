@@ -12,7 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class TagService {
+    /** Репозиторий для поиска и удаления тега. */
     private final TagRepository tagRepository;
+    /** Менеджер сущностей для адресного удаления связей. */
     private final EntityManager entityManager;
 
     /**

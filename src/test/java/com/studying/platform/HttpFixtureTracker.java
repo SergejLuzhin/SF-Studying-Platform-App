@@ -12,6 +12,7 @@ import java.util.Set;
 
 /** Отслеживает созданные HTTP-запросами фикстуры и удаляет только их. */
 public class HttpFixtureTracker {
+    /** Идентификаторы фикстур, сгруппированные по таблицам. */
     private final Map<String, Set<Long>> ids = new LinkedHashMap<>();
 
     /** Создаёт пустой набор идентификаторов фикстур одного теста. */

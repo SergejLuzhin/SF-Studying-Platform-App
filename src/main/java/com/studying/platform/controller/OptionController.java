@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/options")
 public class OptionController {
+    /** Сервис управления вариантами ответов. */
     private final AnswerOptionService answerOptionService;
 
     /**

@@ -38,6 +38,10 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /** Создаёт обработчик ошибок REST API. */
+    public GlobalExceptionHandler() {
+    }
+
     /** Журнал непредвиденных ошибок сервера. */
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
