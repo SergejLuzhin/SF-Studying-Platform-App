@@ -2,14 +2,33 @@
 
 ## Текущее состояние
 
-Все пункты 1–12 `refactor-after-part3.md` завершены. Этапы 16–20 подтверждены итоговыми проверками; этап 21 не начинался и остаётся `pending`.
+Завершён Этап 21: «Демонстрационные данные». Все предыдущие этапы (1–20) подтверждены.
 
-Добавлен сквозной HTTP-тест учебного сценария с отключённым OSIV, без внешней транзакции и с адресной очисткой фикстур.
+## Что реализовано в Этапе 21
+
+- **`DemoDataSeeder`** (`com.studying.platform.seeder`) — компонент, запускаемый через профиль `demo`.
+  Создает: 1 категорию, 3 тега, 1 преподавателя, 2 студентов, 1 курс, 2 модуля, 4 урока, 4 задания, 2 записи, 1 викторину с 2 вопросами (SINGLE_CHOICE + MULTIPLE_CHOICE) и 6 вариантами ответов.
+  Защита от дублей — проверка `existsByEmail(DEMO_TEACHER_EMAIL)`.
+- **Конфигурация:** профиль `demo` добавлен в `application-dev.yml` как `on-profile`.
+- **Репозитории:** добавлены `existsByEmail` в `UserRepository` и `findByName` в `TagRepository`.
+- **Тесты:** 10 интеграционных тестов в `DemoDataSeederTest` (создание, связи, повторный запуск, SQL-проверка).
 
 ## Итоговые проверки
 
-- **PASS:** `RestAcceptanceTest` и полный `mvn -o verify` — 456 тестов, 0 ошибок и пропусков.
-- **PASS:** отдельная генерация JavaDoc основного и тестового кода; остаются 7 предупреждений основного кода и 100 показанных предупреждений тестов.
-- **PASS:** `git diff --check`; в тестах не найдены `@Disabled` и `@Ignore`.
+- **PASS:** `mvn test` — 466 тестов, 0 ошибок, 0 пропусков
+- **PASS:** `mvn javadoc:javadoc` — нет предупреждений JavaDoc для `DemoDataSeeder`
+- **PASS:** `git diff --check` — нет проблем с форматированием
+- **PASS:** независимая проверка `stage-tester` — STATUS: PASS
 
-Проверки выполнены на Java 23 и PostgreSQL Testcontainers; рабочая база не использовалась. Аутентификация и авторизация не реализованы. Следующий этап общего плана — 21, только по отдельному запросу пользователя.
+## Затронутые файлы
+
+- NEW: `src/main/java/com/studying/platform/seeder/DemoDataSeeder.java`
+- NEW: `src/test/java/com/studying/platform/DemoDataSeederTest.java`
+- NEW: `stages/stage-21.md`
+- MOD: `src/main/java/com/studying/platform/repository/UserRepository.java`
+- MOD: `src/main/java/com/studying/platform/repository/TagRepository.java`
+- MOD: `src/main/resources/application-dev.yml`
+
+## Следующий шаг
+
+Этап 22: Docker и автоматизация — `pending`.
