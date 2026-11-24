@@ -2,38 +2,26 @@
 
 ## Текущее состояние
 
-Завершён Этап 22: «Docker и автоматизация». Все предыдущие этапы (1–21) подтверждены.
+Этап 23 «Документация» — `completed`. Следующий этап — 24 «Итоговая проверка», к нему не приступали.
 
-## Что реализовано в Этапе 22
+## Готово и затронутые файлы
 
-- **`Dockerfile`** — одностадийная сборка Spring Boot-приложения (eclipse-temurin:23-jre, EXPOSE 8080, HEALTHCHECK через `nc`, ENTRYPOINT `java -jar`).
-- **`docker-compose.yml`** — сервисы `postgres` (postgres:16, healthcheck через `pg_isready`) и `app` (build из Dockerfile, depends_on postgres service_healthy, порт 8080:8080, изолированная сеть `studying-platform`).
-- **`application-docker.yml`** — профиль `docker`: URL БД `jdbc:postgresql://postgres:5432/studying_platform`, `ddl-auto: update`.
-- **`.github/workflows/ci.yml`** — GitHub Actions: checkout, JDK 23 Temurin, `mvn -B clean compile`, `mvn -B test -Ptest` с Testcontainers.
-- **`DockerInfrastructureTest`** — 16 интеграционных тестов на верификацию файлов и сборки Maven.
+- `README.md` — инструкции локального и Docker-запуска, тестирования и демо; REST API, безопасность, архитектура и правила целостности.
+- `src/main/resources/application-dev.yml` — по явному разрешению пользователя удалён дублирующий ключ `spring.config`.
+- `src/test/java/com/studying/platform/DevProfileStartupTest.java` — регрессионная проверка запуска `dev` и двух запусков `dev,demo` на изолированной PostgreSQL.
+- `stages/stage-23.md` — подробный план; `plan.md` — статус текущего этапа.
+- Новых ADR нет; индекс `docs/adr/README.md` пуст.
 
-## Итоговые проверки
+## Результаты проверок
 
-- **PASS:** `mvn test -Dtest=DockerInfrastructureTest` — 16 тестов, 0 ошибок
-- **PASS:** `mvn test` — 482 теста, 0 ошибок, 0 пропусков
-- **PASS:** `mvn clean compile` — BUILD SUCCESS, 97 source files, 0 errors
-- **PASS:** `git diff --check` — нет проблем с форматированием
-- **PASS:** независимая проверка `stage-tester` — STATUS: PASS
+- **PASS:** независимый `stage-tester`, итоговый `STATUS: PASS`.
+- **PASS:** `mvn -B clean compile && mvn -B test` — 483 теста, без ошибок и пропусков; выборочный набор — 112 тестов.
+- **PASS:** `mvn -B package`, `docker compose config`, `docker compose up --build -d` и HTTP-ответ приложения; сервисы остановлены.
+- **PASS:** запуск `dev`, два запуска `dev,demo` на изолированной PostgreSQL; SQL-подсчёты до и после повторного запуска совпали.
+- **PASS:** буквальные примеры README с `curl` и `jq`, включая просмотр задания, отправку пустой попытки и чтение результата.
+- **PASS:** независимые ручные HTTP-проверки ошибок, `lessonId`, тегов, `/start`, повторных записи и сдачи, неготового теста и удаления с историей и без неё.
+- **PASS:** `git diff --check`.
 
-## Затронутые файлы
+## Проблемы и следующий шаг
 
-- NEW: `Dockerfile`
-- NEW: `docker-compose.yml`
-- NEW: `src/main/resources/application-docker.yml`
-- NEW: `.github/workflows/ci.yml`
-- NEW: `src/test/java/com/studying/platform/DockerInfrastructureTest.java`
-- NEW: `stages/stage-22.md`
-- MOD: `plan.md` (статус этапа 22)
-
-## ADR
-
-Значимых архитектурных решений не требовалось. Инфраструктурные файлы (Dockerfile, docker-compose, CI) — стандартная практика, ADR не создавались.
-
-## Следующий шаг
-
-Этап 23: Документация — `pending`.
+Незакрытых проверок этапа 23 нет. Контейнеры, использованные тестировщиком, остановлены, их данные не удалялись; прежний демонстрационный контейнер переименован тестировщиком. Следующий шаг — этап 24 по отдельной команде пользователя.

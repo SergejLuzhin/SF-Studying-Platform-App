@@ -21,10 +21,3 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
-  # Профиль «demo» — заполнение базы демонстрационными данными.
-  # Активируется поверх профиля «dev» с теми же параметрами подключения.
-  # Запускает DemoDataSeeder при старте приложения.
-  config:
-    activate:
-      on-profile: demo
