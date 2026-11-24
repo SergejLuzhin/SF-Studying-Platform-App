@@ -1,6 +1,7 @@
 package com.studying.platform.service;
 
 import com.studying.platform.entity.Module;
+import com.studying.platform.entity.AnswerOption;
 import com.studying.platform.entity.Question;
 import com.studying.platform.entity.Quiz;
 import com.studying.platform.entity.QuizQuestionType;
@@ -8,6 +9,8 @@ import com.studying.platform.exception.ResourceNotFoundException;
 import com.studying.platform.repository.ModuleRepository;
 import com.studying.platform.repository.QuestionRepository;
 import com.studying.platform.repository.QuizRepository;
+import com.studying.platform.repository.QuizSubmissionRepository;
+import com.studying.platform.repository.AnswerOptionRepository;
 
 import jakarta.persistence.EntityManager;
 
@@ -51,6 +54,12 @@ public class QuestionService {
      */
     private final EntityManager entityManager;
 
+    /** Репозиторий результатов прохождения для защиты учебной истории. */
+    private final QuizSubmissionRepository quizSubmissionRepository;
+
+    /** Репозиторий вариантов ответа для адресного удаления. */
+    private final AnswerOptionRepository answerOptionRepository;
+
     /**
      * Конструктор сервиса с внедрением зависимостей через конструктор.
      *
@@ -58,15 +67,21 @@ public class QuestionService {
      * @param quizRepository       репозиторий викторин
      * @param moduleRepository     репозиторий модулей
      * @param entityManager        менеджер сущностей JPA
+     * @param quizSubmissionRepository репозиторий результатов тестов
+     * @param answerOptionRepository репозиторий вариантов ответа
      */
     public QuestionService(QuestionRepository questionRepository,
                            QuizRepository quizRepository,
                            ModuleRepository moduleRepository,
-                           EntityManager entityManager) {
+                            EntityManager entityManager,
+                            QuizSubmissionRepository quizSubmissionRepository,
+                            AnswerOptionRepository answerOptionRepository) {
         this.questionRepository = questionRepository;
         this.quizRepository = quizRepository;
         this.moduleRepository = moduleRepository;
         this.entityManager = entityManager;
+        this.quizSubmissionRepository = quizSubmissionRepository;
+        this.answerOptionRepository = answerOptionRepository;
     }
 
     /**
@@ -112,8 +127,7 @@ public class QuestionService {
     /**
      * Обновляет текст и тип существующего вопроса.
      * <p>
-     * Проверяет существование вопроса. Если вопрос не найден —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * Проверяет существование вопроса и обновляет переданные поля.
      * </p>
      *
      * @param questionId идентификатор вопроса
@@ -138,15 +152,25 @@ public class QuestionService {
     /**
      * Удаляет вопрос по идентификатору.
      * <p>
-     * Проверяет существование вопроса. Если вопрос не найден —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * Если у родительского теста есть результаты, удаление запрещено.
+     * Иначе сначала удаляются варианты ответа, затем вопрос, в одной транзакции.
      * </p>
      *
      * @param questionId идентификатор вопроса для удаления
      * @throws ResourceNotFoundException если вопрос не найден
+     * @throws IllegalStateException если у теста есть сохранённые результаты
      */
     public void deleteQuestion(Long questionId) {
         Question question = findQuestion(questionId);
+        if (quizSubmissionRepository.countByQuizIdIn(List.of(question.getQuiz().getId())) > 0) {
+            throw new IllegalStateException("Нельзя удалить вопрос теста с сохранёнными результатами");
+        }
+        for (AnswerOption option : answerOptionRepository.findByQuestionId(questionId)) {
+            question.getOptions().remove(option);
+            entityManager.remove(option);
+        }
+        entityManager.flush();
+        question.getQuiz().getQuestions().remove(question);
         entityManager.remove(question);
         entityManager.flush();
     }

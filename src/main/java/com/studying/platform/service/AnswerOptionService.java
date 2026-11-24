@@ -5,6 +5,7 @@ import com.studying.platform.entity.Question;
 import com.studying.platform.exception.ResourceNotFoundException;
 import com.studying.platform.repository.AnswerOptionRepository;
 import com.studying.platform.repository.QuestionRepository;
+import com.studying.platform.repository.QuizSubmissionRepository;
 
 import jakarta.persistence.EntityManager;
 
@@ -43,19 +44,25 @@ public class AnswerOptionService {
      */
     private final EntityManager entityManager;
 
+    /** Репозиторий результатов для защиты истории прохождения. */
+    private final QuizSubmissionRepository quizSubmissionRepository;
+
     /**
      * Конструктор сервиса с внедрением зависимостей через конструктор.
      *
      * @param answerOptionRepository  репозиторий вариантов ответов
      * @param questionRepository      репозиторий вопросов
      * @param entityManager           менеджер сущностей JPA
+     * @param quizSubmissionRepository репозиторий результатов тестов
      */
     public AnswerOptionService(AnswerOptionRepository answerOptionRepository,
                                QuestionRepository questionRepository,
-                               EntityManager entityManager) {
+                                EntityManager entityManager,
+                                QuizSubmissionRepository quizSubmissionRepository) {
         this.answerOptionRepository = answerOptionRepository;
         this.questionRepository = questionRepository;
         this.entityManager = entityManager;
+        this.quizSubmissionRepository = quizSubmissionRepository;
     }
 
     /**
@@ -125,8 +132,7 @@ public class AnswerOptionService {
     /**
      * Обновляет текст и признак правильности существующего варианта ответа.
      * <p>
-     * Проверяет существование варианта. Если вариант не найден —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * Проверяет существование варианта и обновляет переданные поля.
      * </p>
      *
      * @param answerOptionId идентификатор варианта ответа
@@ -151,15 +157,19 @@ public class AnswerOptionService {
     /**
      * Удаляет вариант ответа по идентификатору.
      * <p>
-     * Проверяет существование варианта. Если вариант не найден —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * Удаляет только указанный вариант при отсутствии результатов родительского теста.
      * </p>
      *
      * @param answerOptionId идентификатор варианта для удаления
      * @throws ResourceNotFoundException если вариант не найден
+     * @throws IllegalStateException если у теста есть сохранённые результаты
      */
     public void deleteAnswerOption(Long answerOptionId) {
         AnswerOption option = findAnswerOption(answerOptionId);
+        if (quizSubmissionRepository.countByQuizIdIn(List.of(option.getQuestion().getQuiz().getId())) > 0) {
+            throw new IllegalStateException("Нельзя удалить вариант ответа теста с сохранёнными результатами");
+        }
+        option.getQuestion().getOptions().remove(option);
         entityManager.remove(option);
         entityManager.flush();
     }

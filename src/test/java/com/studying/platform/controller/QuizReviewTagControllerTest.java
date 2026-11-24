@@ -79,6 +79,14 @@ class QuizReviewTagControllerTest {
     @Autowired
     private jakarta.persistence.EntityManager entityManager;
 
+    /** Сервис вопросов для проверки удаления внутри активного контекста JPA. */
+    @Autowired
+    private com.studying.platform.service.QuestionService questionService;
+
+    /** Сервис вариантов для проверки согласованности загруженных связей. */
+    @Autowired
+    private com.studying.platform.service.AnswerOptionService answerOptionService;
+
     /** Идентификаторы ресурсов, созданных текущим тестом. */
     private final com.studying.platform.HttpFixtureTracker fixtureTracker =
             new com.studying.platform.HttpFixtureTracker();
@@ -520,6 +528,174 @@ class QuizReviewTagControllerTest {
         perform(get("/api/question/" + question.getId() + "/options"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    /** Проверяет чтение, валидацию, изменение и адресное удаление варианта через HTTP. */
+    @Test
+    void optionCrud_shouldPersistChangesAndDeleteOnlySelectedOption() throws Exception {
+        long[] fixture = createOptionFixture();
+        long first = createOption(fixture[1], "Первый", true);
+        long second = createOption(fixture[1], "Второй", false);
+        perform(get("/api/options/" + first)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.questionId").value(fixture[1]))
+                .andExpect(jsonPath("$.text").value("Первый"))
+                .andExpect(jsonPath("$.isCorrect").value(true));
+        for (String invalid : java.util.List.of("{\"text\":\"\",\"isCorrect\":true}",
+                "{\"text\":\"Новый\",\"isCorrect\":null}")) {
+            perform(put("/api/options/" + first).contentType(MediaType.APPLICATION_JSON).content(invalid))
+                    .andExpect(status().isBadRequest());
+        }
+        perform(put("/api/options/" + first).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"Изменённый\",\"isCorrect\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.text").value("Изменённый"))
+                .andExpect(jsonPath("$.isCorrect").value(false));
+        perform(get("/api/options/" + first)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("Изменённый"))
+                .andExpect(jsonPath("$.isCorrect").value(false));
+        transactions.executeWithoutResult(status -> {
+            Map<String, Object> row = jdbcTemplate.queryForMap("select text, is_correct from answeroption where id = ?", first);
+            assertEquals("Изменённый", row.get("text"));
+            assertEquals(false, row.get("is_correct"));
+        });
+        perform(delete("/api/options/" + first)).andExpect(status().isNoContent());
+        perform(get("/api/options/" + first)).andExpect(status().isNotFound());
+        perform(get("/api/options/" + second)).andExpect(status().isOk());
+        perform(put("/api/options/999999999").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"Вариант\",\"isCorrect\":true}")).andExpect(status().isNotFound());
+        perform(delete("/api/options/999999999")).andExpect(status().isNotFound());
+    }
+
+    /** Проверяет удаление вопроса со всеми его вариантами без затрагивания другого вопроса. */
+    @Test
+    void deleteQuestion_withOptions_shouldDeleteChildren() throws Exception {
+        long[] fixture = createOptionFixture();
+        long first = createOption(fixture[1], "Первый", true);
+        long second = createOption(fixture[1], "Второй", false);
+        long otherQuestion = createQuestionForQuiz(fixture[0]);
+        long otherOption = createOption(otherQuestion, "Другой", true);
+        perform(delete("/api/question/" + fixture[1])).andExpect(status().isNoContent());
+        transactions.executeWithoutResult(status -> {
+            assertEquals(0, jdbcTemplate.queryForObject("select count(*) from question where id = ?", Integer.class, fixture[1]));
+            assertEquals(0, jdbcTemplate.queryForObject("select count(*) from answeroption where id in (?, ?)", Integer.class, first, second));
+            assertEquals(1, jdbcTemplate.queryForObject("select count(*) from answeroption where id = ?", Integer.class, otherOption));
+        });
+    }
+
+    /** Проверяет удаление вопроса с уже загруженной коллекцией вариантов в одной транзакции. */
+    @Test
+    void deleteQuestion_withLoadedOptions_shouldRemoveChildren() throws Exception {
+        long[] fixture = createOptionFixture();
+        long option = createOption(fixture[1], "Ответ", true);
+        transactions.executeWithoutResult(status -> {
+            var question = entityManager.find(com.studying.platform.entity.Question.class, fixture[1]);
+            assertEquals(1, question.getOptions().size());
+            questionService.deleteQuestion(fixture[1]);
+        });
+        transactions.executeWithoutResult(status -> assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from answeroption where id = ?", Integer.class, option)));
+    }
+
+    /** Проверяет удаление варианта из уже загруженной коллекции вопроса. */
+    @Test
+    void deleteOption_withLoadedOptions_shouldRemoveOnlyOption() throws Exception {
+        long[] fixture = createOptionFixture();
+        long option = createOption(fixture[1], "Ответ", true);
+        transactions.executeWithoutResult(status -> {
+            var question = entityManager.find(com.studying.platform.entity.Question.class, fixture[1]);
+            assertEquals(1, question.getOptions().size());
+            answerOptionService.deleteAnswerOption(option);
+            assertTrue(question.getOptions().isEmpty());
+        });
+        transactions.executeWithoutResult(status -> assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from answeroption where id = ?", Integer.class, option)));
+    }
+
+    /** Проверяет запрет удаления структуры при наличии результата и сохранность истории. */
+    @Test
+    void deleteQuestionOrOption_withResults_shouldPreserveHistory() throws Exception {
+        long[] fixture = createOptionFixture();
+        long option = createOption(fixture[1], "Правильный", true);
+        long other = createOption(fixture[1], "Неверный", false);
+        Long student = createUser("history-" + java.util.UUID.randomUUID().toString().substring(0, 12) + "@test.io", UserRole.STUDENT);
+        enrollStudent(student, fixture[2]);
+        MvcResult result = perform(post("/api/quiz/" + fixture[0] + "/submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new SubmitAnswersRequestDto(student, Map.of(fixture[1], Set.of(option))))))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.score").value(100)).andReturn();
+        long submissionId = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").longValue();
+        perform(delete("/api/options/" + option)).andExpect(status().isBadRequest());
+        perform(delete("/api/question/" + fixture[1])).andExpect(status().isBadRequest());
+        transactions.executeWithoutResult(status -> {
+            assertEquals(1, jdbcTemplate.queryForObject("select count(*) from question where id = ?", Integer.class, fixture[1]));
+            assertEquals(2, jdbcTemplate.queryForObject("select count(*) from answeroption where id in (?, ?)", Integer.class, option, other));
+            assertEquals(100, jdbcTemplate.queryForObject("select score from quizsubmission where id = ?", Integer.class, submissionId));
+        });
+        perform(put("/api/options/" + option).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"Изменённый\",\"isCorrect\":true}")).andExpect(status().isOk());
+        long addedQuestion = createQuestionForQuiz(fixture[0]);
+        createOption(addedQuestion, "Добавленный", true);
+    }
+
+    /** Проверяет, что неполный тест можно создать по частям, но нельзя сдать. */
+    @Test
+    void incompleteQuestion_canBeCreatedButCannotBeSubmitted() throws Exception {
+        long[] fixture = createOptionFixture();
+        Long student = createUser("incomplete-" + java.util.UUID.randomUUID().toString().substring(0, 12) + "@test.io", UserRole.STUDENT);
+        enrollStudent(student, fixture[2]);
+        perform(post("/api/quiz/" + fixture[0] + "/submit").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new SubmitAnswersRequestDto(student, Map.of()))))
+                .andExpect(status().isBadRequest());
+        transactions.executeWithoutResult(status -> assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from quizsubmission where quiz_id = ?", Integer.class, fixture[0])));
+    }
+
+    /**
+     * Создаёт курс, модуль, тест и вопрос для проверок вариантов.
+     *
+     * @return идентификаторы теста, вопроса и курса
+     * @throws Exception если создание фикстур не удалось
+     */
+    private long[] createOptionFixture() throws Exception {
+        String suffix = java.util.UUID.randomUUID().toString().substring(0, 12);
+        Long teacher = createUser("option-" + suffix + "@test.io", UserRole.TEACHER);
+        Long category = createCategory("Варианты " + suffix);
+        Long course = createCourse(teacher, category);
+        Long module = createModule(course, 1);
+        MvcResult result = perform(post("/api/quiz").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new QuizRequestDto(module, "Тест", 30))))
+                .andExpect(status().isCreated()).andReturn();
+        long quiz = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").longValue();
+        return new long[]{quiz, createQuestionForQuiz(quiz), course};
+    }
+
+    /**
+     * Создаёт вопрос в указанном тесте.
+     *
+     * @param quizId идентификатор теста
+     * @return идентификатор вопроса
+     * @throws Exception если запрос не выполнен
+     */
+    private long createQuestionForQuiz(long quizId) throws Exception {
+        MvcResult result = perform(post("/api/quiz/" + quizId + "/questions").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new QuestionRequestDto("Вопрос", QuizQuestionType.SINGLE_CHOICE))))
+                .andExpect(status().isCreated()).andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").longValue();
+    }
+
+    /**
+     * Создаёт вариант ответа через существующий HTTP-путь.
+     *
+     * @param questionId идентификатор вопроса
+     * @param text текст варианта
+     * @param correct признак правильности
+     * @return идентификатор варианта
+     * @throws Exception если запрос не выполнен
+     */
+    private long createOption(long questionId, String text, boolean correct) throws Exception {
+        MvcResult result = perform(post("/api/question/" + questionId + "/options").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new com.studying.platform.dto.AnswerOptionRequestDto(text, correct))))
+                .andExpect(status().isCreated()).andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").longValue();
     }
 
     /**

@@ -1,11 +1,12 @@
 package com.studying.platform.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * DTO для создания и обновления варианта ответа викторины.
  * <p>
- * Содержит текст варианта и признак правильности ответа.
+ * Содержит обязательные текст варианта и признак правильности ответа.
  * </p>
  *
  * @see com.studying.platform.entity.AnswerOption
@@ -19,8 +20,9 @@ public class AnswerOptionRequestDto {
     private String text;
 
     /**
-     * Признак правильности варианта ответа.
+     * Обязательный признак правильности варианта ответа.
      */
+    @NotNull(message = "Признак правильности варианта не может быть пустым")
     private Boolean isCorrect;
 
     /**
