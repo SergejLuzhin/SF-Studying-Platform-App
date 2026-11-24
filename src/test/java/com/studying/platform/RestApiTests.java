@@ -70,6 +70,58 @@ class RestApiTests {
     private final com.studying.platform.HttpFixtureTracker fixtureTracker =
             new com.studying.platform.HttpFixtureTracker();
 
+    /**
+     * Проверяет безопасные ответы на ошибки JSON, параметров и отсутствующие ресурсы.
+     *
+     * @throws Exception если выполнение HTTP-запроса завершилось ошибкой
+     */
+    @Test
+    void clientErrorsUseConsistentSafeResponses() throws Exception {
+        for (String body : new String[]{"{", "{\"email\":\"test@example.com\",\"role\":\"UNKNOWN\"}",
+                "{\"email\":[],\"role\":\"STUDENT\"}"}) {
+            perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.timestamp").exists())
+                    .andExpect(jsonPath("$.status").value(400))
+                    .andExpect(jsonPath("$.error").value("Bad Request"))
+                    .andExpect(jsonPath("$.message").value("Некорректное тело запроса"))
+                    .andExpect(jsonPath("$.path").value("/api/users"));
+        }
+        perform(get("/api/users/not-a-number")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.path").value("/api/users/not-a-number"));
+        perform(delete("/api/enrollments")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").isNotEmpty());
+        perform(get("/api/unknown-route")).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.path").value("/api/unknown-route"));
+        perform(get("/api/users/{id}", Long.MAX_VALUE)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+        perform(post("/api/users").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"invalid\",\"role\":\"STUDENT\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").isNotEmpty());
+        perform(patch("/api/users/1")).andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405));
+    }
+
+    /**
+     * Проверяет отсутствие SQL и имени ограничения в ответе на нарушение уникальности.
+     *
+     * @throws Exception если выполнение HTTP-запроса завершилось ошибкой
+     */
+    @Test
+    void databaseIntegrityErrorDoesNotExposeDetails() throws Exception {
+        String body = "{\"name\":\"tag-error-" + java.util.UUID.randomUUID() + "\"}";
+        perform(post("/api/tags").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        perform(post("/api/tags").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Нарушение целостности данных"))
+                .andExpect(jsonPath("$.path").value("/api/tags"));
+    }
+
 
     /**
      * Очищает созданные тестом данные после каждого теста.
