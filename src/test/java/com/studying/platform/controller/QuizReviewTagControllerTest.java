@@ -560,6 +560,84 @@ class QuizReviewTagControllerTest {
                 .andExpect(jsonPath("$.questions[0].options").isArray());
     }
 
+    /** Проверяет весь ответ запуска без признаков правильности и подсчёт по полученным ID. */
+    @Test
+    void startQuiz_hidesCorrectnessAndAllowsSubmission() throws Exception {
+        String suffix = java.util.UUID.randomUUID().toString().substring(0, 12);
+        Long teacherId = createUser("teacher-" + suffix + "@test.io", UserRole.TEACHER);
+        Long studentId = createUser("student-" + suffix + "@test.io", UserRole.STUDENT);
+        Long categoryId = createCategory("Категория " + suffix);
+        Long courseId = createCourse(teacherId, categoryId);
+        Long moduleId = createModule(courseId, 1);
+        enrollStudent(studentId, courseId);
+
+        MvcResult quizResult = perform(post("/api/quiz").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new QuizRequestDto(moduleId, "Проверочный тест", 30))))
+                .andExpect(status().isCreated()).andReturn();
+        long quizId = objectMapper.readTree(quizResult.getResponse().getContentAsString()).get("id").longValue();
+        MvcResult questionResult = perform(post("/api/quiz/" + quizId + "/questions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new QuestionRequestDto("Вопрос?", QuizQuestionType.SINGLE_CHOICE))))
+                .andExpect(status().isCreated()).andReturn();
+        long questionId = objectMapper.readTree(questionResult.getResponse().getContentAsString()).get("id").longValue();
+
+        for (var option : java.util.List.of(
+                new com.studying.platform.dto.AnswerOptionRequestDto("Вариант A", true),
+                new com.studying.platform.dto.AnswerOptionRequestDto("Вариант B", false))) {
+            perform(post("/api/question/" + questionId + "/options").contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(option)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.isCorrect").value(option.getIsCorrect()));
+        }
+
+        MvcResult startResult = perform(get("/api/quiz/" + quizId + "/start"))
+                .andExpect(status().isOk()).andReturn();
+        var root = objectMapper.readTree(startResult.getResponse().getContentAsString());
+        assertEquals(Set.of("id", "moduleId", "title", "timeLimit", "questions"), fieldNames(root));
+        assertEquals(quizId, root.get("id").longValue());
+        assertEquals(moduleId.longValue(), root.get("moduleId").longValue());
+        assertEquals("Проверочный тест", root.get("title").asText());
+        assertEquals(30, root.get("timeLimit").intValue());
+        assertEquals(1, root.get("questions").size());
+        var question = root.get("questions").get(0);
+        assertEquals(Set.of("id", "text", "type", "options"), fieldNames(question));
+        assertEquals(questionId, question.get("id").longValue());
+        assertEquals("Вопрос?", question.get("text").asText());
+        assertEquals("SINGLE_CHOICE", question.get("type").asText());
+        assertEquals(2, question.get("options").size());
+        Map<String, Long> optionIds = new java.util.HashMap<>();
+        for (var option : question.get("options")) {
+            assertEquals(Set.of("id", "text"), fieldNames(option));
+            assertTrue(option.get("id").canConvertToLong());
+            optionIds.put(option.get("text").asText(), option.get("id").longValue());
+        }
+        assertEquals(Set.of("Вариант A", "Вариант B"), optionIds.keySet());
+        assertNotEquals(optionIds.get("Вариант A"), optionIds.get("Вариант B"));
+
+        SubmitAnswersRequestDto answers = new SubmitAnswersRequestDto(studentId,
+                Map.of(question.get("id").longValue(), Set.of(optionIds.get("Вариант A"))));
+        perform(post("/api/quiz/" + quizId + "/submit").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(answers)))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.score").value(100));
+        SubmitAnswersRequestDto wrongAnswers = new SubmitAnswersRequestDto(studentId,
+                Map.of(questionId, Set.of(optionIds.get("Вариант B"))));
+        perform(post("/api/quiz/" + quizId + "/submit").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(wrongAnswers)))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.score").value(0));
+    }
+
+    /**
+     * Возвращает имена всех полей JSON-объекта для проверки полного контракта.
+     *
+     * @param node проверяемый JSON-объект
+     * @return множество имён полей
+     */
+    private Set<String> fieldNames(com.fasterxml.jackson.databind.JsonNode node) {
+        Set<String> names = new java.util.HashSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
+    }
+
     /**
      * Позитивный тест: прохождение теста с правильными ответами (HTTP 201).
      */

@@ -176,6 +176,8 @@ public class QuizController {
      * Получает викторину для прохождения.
      * <p>
      * Загружает викторину с вопросами и вариантами ответов через EntityGraph.
+     * Признаки правильности вариантов в ответе не возвращаются. Аутентификация и
+     * авторизация не реализованы; административные операции не защищены от доступа.
      * Если викторина не найдена — ошибка 404. Если тест без вопросов — ошибка 400.
      * </p>
      *
@@ -274,7 +276,7 @@ public class QuizController {
     }
 
     /**
-     * Преобразует сущность вопроса в DTO с вариантами ответов.
+     * Преобразует сущность вопроса в DTO с идентификаторами и текстами вариантов без правильности.
      *
      * @param question сущность вопроса
      * @return DTO вопроса с вариантами
@@ -283,8 +285,7 @@ public class QuizController {
         List<AnswerOptionDto> optionDtos = question.getOptions().stream()
                 .map(option -> new AnswerOptionDto(
                         option.getId(),
-                        option.getText(),
-                        option.getIsCorrect()))
+                        option.getText()))
                 .collect(Collectors.toList());
 
         return new QuestionWithOptionsDto(

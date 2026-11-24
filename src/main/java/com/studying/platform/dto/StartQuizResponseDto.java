@@ -1,13 +1,13 @@
 package com.studying.platform.dto;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
  * DTO для ответа с викториной, подготовленной к прохождению.
  * <p>
- * Содержит基本信息 викторины и вложенный список вопросов с вариантами ответов.
+ * Содержит основные сведения викторины и вложенный список вопросов с вариантами ответов.
  * Используется эндпоинтом GET /api/quiz/{id}/start.
+ * Варианты содержат идентификаторы и текст, но не признаки правильности.
  * </p>
  *
  * @see com.studying.platform.entity.Quiz
@@ -275,7 +275,7 @@ public class StartQuizResponseDto {
     }
 
     /**
-     * Вложенный DTO для варианта ответа.
+     * Вариант ответа для прохождения: только идентификатор и текст без признака правильности.
      */
     public static class AnswerOptionDto {
 
@@ -290,27 +290,20 @@ public class StartQuizResponseDto {
         private String text;
 
         /**
-         * Признак правильности варианта.
-         */
-        private Boolean isCorrect;
-
-        /**
          * Публичный конструктор по умолчанию.
          */
         public AnswerOptionDto() {
         }
 
         /**
-         * Создаёт DTO варианта ответа.
+         * Создаёт DTO варианта ответа для прохождения без признака правильности.
          *
          * @param id        идентификатор варианта
          * @param text      текст варианта
-         * @param isCorrect признак правильности
          */
-        public AnswerOptionDto(Long id, String text, Boolean isCorrect) {
+        public AnswerOptionDto(Long id, String text) {
             this.id = id;
             this.text = text;
-            this.isCorrect = isCorrect;
         }
 
         /**
@@ -349,22 +342,5 @@ public class StartQuizResponseDto {
             this.text = text;
         }
 
-        /**
-         * Возвращает признак правильности варианта ответа.
-         *
-         * @return признак правильности
-         */
-        public Boolean getIsCorrect() {
-            return isCorrect;
-        }
-
-        /**
-         * Устанавливает признак правильности варианта ответа.
-         *
-         * @param isCorrect признак правильности
-         */
-        public void setIsCorrect(Boolean isCorrect) {
-            this.isCorrect = isCorrect;
-        }
     }
 }
