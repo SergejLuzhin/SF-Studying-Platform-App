@@ -171,11 +171,7 @@ class RestApiTests {
     }
 
     /**
-     * Проверка: обновление пользователя (HTTP 200).
-     * <p>
-     * В рамках текущего этапа PUT не изменяет поля пользователя,
-     * но возвращает актуальные данные с кодом 200.
-     * </p>
+     * Проверяет сохранение нового email и роли в ответе, отдельном GET и базе данных.
      */
     @Test
     void updateUser_shouldReturn200() throws Exception {
@@ -183,10 +179,12 @@ class RestApiTests {
 
         perform(put("/api/users/" + userId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                        .content("{\"email\":\"updated@test.io\",\"role\":\"STUDENT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(userId))
-                .andExpect(jsonPath("$.email").value("api-user3@test.io"));
+                .andExpect(jsonPath("$.email").value("updated@test.io"))
+                .andExpect(jsonPath("$.role").value("STUDENT"));
+        assertUserState(userId, "updated@test.io", "STUDENT");
     }
 
     /**
@@ -196,8 +194,57 @@ class RestApiTests {
     void updateUser_notFound_shouldReturn404() throws Exception {
         perform(put("/api/users/99999")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                        .content("{\"email\":\"missing@test.io\",\"role\":\"STUDENT\"}"))
                 .andExpect(status().isNotFound());
+    }
+
+    /** Проверяет, что сохранение прежнего email допускается при изменении роли. */
+    @Test
+    void updateUser_sameEmail_shouldSucceed() throws Exception {
+        Long userId = createUser("same-update@test.io", UserRole.STUDENT);
+        perform(put("/api/users/" + userId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"same-update@test.io\",\"role\":\"TEACHER\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("same-update@test.io"))
+                .andExpect(jsonPath("$.role").value("TEACHER"));
+        assertUserState(userId, "same-update@test.io", "TEACHER");
+    }
+
+    /** Проверяет отклонение неверных данных и конфликта email без изменения обоих пользователей. */
+    @Test
+    void updateUser_invalidData_shouldNotModifyUsers() throws Exception {
+        Long userId = createUser("original-update@test.io", UserRole.STUDENT);
+        Long otherId = createUser("occupied-update@test.io", UserRole.ADMIN);
+        for (String body : java.util.List.of(
+                "{}",
+                "{\"email\":\"\",\"role\":\"TEACHER\"}",
+                "{\"email\":\"not-an-email\",\"role\":\"TEACHER\"}",
+                "{\"email\":\"" + "a".repeat(51) + "@test.io\",\"role\":\"TEACHER\"}",
+                "{\"email\":\"new-update@test.io\",\"role\":null}",
+                "{\"email\":\"occupied-update@test.io\",\"role\":\"TEACHER\"}")) {
+            perform(put("/api/users/" + userId).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+            assertUserState(userId, "original-update@test.io", "STUDENT");
+            assertUserState(otherId, "occupied-update@test.io", "ADMIN");
+        }
+    }
+
+    /**
+     * Проверяет пользовательские данные через отдельный GET и новую транзакцию базы.
+     *
+     * @param id идентификатор пользователя
+     * @param email ожидаемый адрес
+     * @param role ожидаемая роль
+     * @throws Exception если HTTP-запрос или проверка не выполнены
+     */
+    private void assertUserState(Long id, String email, String role) throws Exception {
+        perform(get("/api/users/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(email)).andExpect(jsonPath("$.role").value(role));
+        transactions.executeWithoutResult(status -> {
+            Map<String, Object> row = jdbcTemplate.queryForMap("select login, role from users where id = ?", id);
+            assertEquals(email, row.get("login"));
+            assertEquals(role, row.get("role"));
+        });
     }
 
     /**

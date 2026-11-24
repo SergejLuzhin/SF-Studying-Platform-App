@@ -1,6 +1,7 @@
 package com.studying.platform.service;
 
 import com.studying.platform.dto.UserCreateDto;
+import com.studying.platform.dto.UserUpdateDto;
 import com.studying.platform.entity.User;
 import com.studying.platform.entity.UserRole;
 import com.studying.platform.exception.ResourceNotFoundException;
@@ -12,12 +13,13 @@ import jakarta.validation.Validator;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Сервис для управления пользователями учебной платформы.
  * <p>
- * Обеспечивает бизнес-логику создания и чтения пользователей.
+ * Обеспечивает бизнес-логику создания, изменения и чтения пользователей.
  * Все публичные методы записи транзакционны; метод чтения помечен
  * как чтение-только. Валидация входных данных выполняется с помощью
  * Jakarta Bean Validation до момента сохранения в базу данных.
@@ -135,6 +137,45 @@ public class UserService {
 
         User user = new User(dto.getEmail(), dto.getRole());
         return userRepository.saveAndFlush(user);
+    }
+
+    /**
+     * Полностью обновляет email и роль пользователя в одной транзакции.
+     * Уникальность проверяется сервисом и ограничением базы при немедленном сохранении.
+     *
+     * @param userId идентификатор изменяемого пользователя
+     * @param dto обязательные новые email и роль
+     * @return сохранённый пользователь
+     * @throws ResourceNotFoundException если пользователь не найден
+     * @throws IllegalArgumentException если DTO отсутствует
+     * @throws ConstraintViolationException если поля не прошли проверку
+     * @throws IllegalStateException если email занят или нарушено ограничение целостности
+     */
+    public User updateUser(Long userId, UserUpdateDto dto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Пользователь с идентификатором " + userId + " не найден"));
+        if (dto == null) {
+            throw new IllegalArgumentException("Данные пользователя не могут быть пустыми");
+        }
+        Set<ConstraintViolation<UserUpdateDto>> violations = validator.validate(dto);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
+        userRepository.findByEmail(dto.getEmail()).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new IllegalStateException("Указанный адрес электронной почты уже используется");
+            }
+        });
+        user.setEmail(dto.getEmail());
+        user.setRole(dto.getRole());
+        try {
+            return userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException exception) {
+            throw new IllegalStateException(
+                    "Не удалось обновить пользователя: адрес электронной почты занят или нарушены ограничения данных",
+                    exception);
+        }
     }
 
     /**

@@ -2,6 +2,7 @@ package com.studying.platform.controller;
 
 import com.studying.platform.dto.UserCreateDto;
 import com.studying.platform.dto.UserResponseDto;
+import com.studying.platform.dto.UserUpdateDto;
 import com.studying.platform.entity.User;
 import com.studying.platform.service.UserService;
 
@@ -82,19 +83,19 @@ public class UserController {
     /**
      * Обновляет данные существующего пользователя.
      * <p>
-     * В рамках текущего этапа не изменяет поля пользователя, так как сущность
-     * {@code User} хранит только email и роль. Метод возвращает текущего
-     * пользователя с кодом 200.预留 для последующего расширения.
+     * Принимает обязательные email и роль, сохраняет оба поля и возвращает
+     * обновлённые данные. При отсутствии пользователя возвращается 404,
+     * при неверных данных или занятом email — 400.
      * </p>
      *
      * @param userId идентификатор пользователя
-     * @param dto    данные для обновления (пустой)
+     * @param dto    новые адрес электронной почты и роль
      * @return HTTP 200 с актуальным DTO пользователя
      */
     @PutMapping("/{userId}")
     public ResponseEntity<UserResponseDto> updateUser(
-            @PathVariable Long userId, @RequestBody UserResponseDto dto) {
-        User user = userService.getUser(userId);
+            @PathVariable Long userId, @Valid @RequestBody UserUpdateDto dto) {
+        User user = userService.updateUser(userId, dto);
         UserResponseDto response = toResponseDto(user);
         return ResponseEntity.ok(response);
     }
