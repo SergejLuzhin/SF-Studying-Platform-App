@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * и бизнес-правил.
  * </p>
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.jpa.open-in-view=false")
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 class QuizReviewTagControllerTest {
@@ -242,6 +242,47 @@ class QuizReviewTagControllerTest {
     }
 
     // ==================== Позитивные сценарии ====================
+
+    /**
+     * Проверяет ответы теста и вопроса с вариантами после закрытия транзакций сервиса.
+     *
+     * @throws Exception если выполнение запроса или чтение ответа завершилось ошибкой
+     */
+    @Test
+    void quizAndQuestionWithOptionsWorkWithoutOpenSessionInView() throws Exception {
+        Long teacher = createUser("osiv-quiz@test.io", UserRole.TEACHER);
+        Long category = createCategory("Категория OSIV");
+        Long course = createCourse(teacher, category);
+        Long module = createModule(course, 1);
+        QuizRequestDto quizDto = new QuizRequestDto(module, "Тест OSIV", 30);
+        MvcResult quizResult = perform(post("/api/quiz").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(quizDto))).andExpect(status().isCreated()).andReturn();
+        Long quiz = objectMapper.readValue(quizResult.getResponse().getContentAsString(), QuizResponseDto.class).getId();
+        QuestionRequestDto questionDto = new QuestionRequestDto("Вопрос", QuizQuestionType.SINGLE_CHOICE);
+        MvcResult questionResult = perform(post("/api/question/quiz/{id}/questions", quiz)
+                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(questionDto)))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.optionCount").value(0)).andReturn();
+        Long question = objectMapper.readValue(questionResult.getResponse().getContentAsString(),
+                QuestionResponseDto.class).getId();
+        perform(post("/api/question/{id}/options", question).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"Ответ\",\"isCorrect\":true}")).andExpect(status().isCreated());
+        perform(get("/api/quiz/{id}", quiz)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.questionCount").value(1));
+        perform(put("/api/quiz/{id}", quiz).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(quizDto))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.questionCount").value(1));
+        perform(get("/api/question/{id}", question)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.optionCount").value(1));
+        perform(put("/api/question/{id}", question).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(questionDto))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.optionCount").value(1));
+        perform(get("/api/quiz/{id}/questions", quiz)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].optionCount").value(1));
+        perform(get("/api/quiz/{id}/start", quiz)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.questions[0].options[0].isCorrect").doesNotExist());
+        perform(get("/api/question/{id}", Long.MAX_VALUE)).andExpect(status().isNotFound());
+        perform(get("/api/quiz/{id}", Long.MAX_VALUE)).andExpect(status().isNotFound());
+    }
 
     /**
      * Позитивный тест: создание викторины (HTTP 201).

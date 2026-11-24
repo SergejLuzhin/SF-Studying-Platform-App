@@ -40,7 +40,8 @@ public class HttpFixtureTracker {
         else if (path.equals("/api/submissions")) table = "submissions";
         else if (path.equals("/api/enrollments")) table = "enrollments";
         else if (path.equals("/api/quiz")) table = "quiz";
-        else if (path.matches("/api/quiz/\\d+/questions")) table = "question";
+        else if (path.matches("/api/quiz/\\d+/questions")
+                || path.matches("/api/question/quiz/\\d+/questions")) table = "question";
         else if (path.matches("/api/question/\\d+/options")) table = "answeroption";
         else if (path.matches("/api/quiz/\\d+/submit")) table = "quizsubmission";
         else if (path.equals("/api/course-reviews")) table = "course_reviews";

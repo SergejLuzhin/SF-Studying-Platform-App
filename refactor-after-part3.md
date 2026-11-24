@@ -32,7 +32,7 @@
 | 7 | Доработать связь тегов с курсом и удаление тегов | `completed` |
 | 8 | Исправить клиентские ошибки и ответы API | `completed` |
 | 9 | Устранить неоднозначность ID урока при работе с заданиями | `completed` |
-| 10 | Проверить REST без Open Session in View | `pending` |
+| 10 | Проверить REST без Open Session in View | `completed` |
 | 11 | Исправить JavaDoc и документацию | `pending` |
 | 12 | Итоговая сквозная приёмка и checkpoint | `pending` |
 
@@ -192,7 +192,7 @@
 
 **Проверки:** `PASS` — `AssignmentControllerTest` (12 тестов); `PASS` — `mvn -o verify` (454 теста, 0 ошибок и пропусков) на Java 23 и PostgreSQL Testcontainers; `PASS` — `git diff --check`. Для совместимости необязательный `lessonId` в теле PUT игнорируется и не меняет родителя.
 
-## 10. Проверить REST без Open Session in View — `pending`
+## 10. Проверить REST без Open Session in View — `completed`
 
 **Проблема:** контроллеры формируют DTO из ленивых JPA-сущностей после выхода из транзакции; `GET /api/quiz/{id}` при `spring.jpa.open-in-view=false` возвращает 500.
 
@@ -206,6 +206,8 @@
 6. Запустить тесты с `open-in-view=false` и полный `mvn verify`. Не менять глобальную настройку приложения без необходимости; цель — не зависеть от неё.
 
 **Готово, когда:** проверенные REST-сценарии работают при закрытой сервисной транзакции и отключённом OSIV без `LazyInitializationException`.
+
+**Проверки:** `PASS` — совместный прогон пяти HTTP-классов с `spring.jpa.open-in-view=false` (143 теста); `PASS` — `mvn -o verify` (455 тестов, 0 ошибок и пропусков) на Java 23 и PostgreSQL Testcontainers; `PASS` — `git diff --check`. До исправления чтение и обновление теста и список вопросов возвращали HTTP 500.
 
 ## 11. Исправить JavaDoc и документацию — `pending`
 

@@ -125,6 +125,7 @@ public class QuizService {
      * Возвращает викторину по идентификатору.
      * <p>
      * Если викторина не найдена — выбрасывает {@link ResourceNotFoundException}.
+     * Коллекция вопросов загружается до выхода из транзакции для формирования DTO.
      * </p>
      *
      * @param quizId идентификатор викторины
@@ -133,16 +134,19 @@ public class QuizService {
      */
     @Transactional(readOnly = true)
     public Quiz findQuiz(Long quizId) {
-        return quizRepository.findById(quizId)
+        Quiz quiz = quizRepository.findById(quizId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Викторина с идентификатором " + quizId + " не найдена"));
+        quiz.getQuestions().size();
+        return quiz;
     }
 
     /**
      * Обновляет название и лимит времени существующей викторины.
      * <p>
      * Проверяет существование викторины. Если викторина не найдена —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * выбрасывает {@link ResourceNotFoundException}. Вопросы загружаются
+     * внутри транзакции для вычисления количества в DTO.
      * </p>
      *
      * @param quizId    идентификатор викторины
@@ -371,7 +375,8 @@ public class QuizService {
      * Возвращает список всех вопросов указанной викторины.
      * <p>
      * Проверяет существование викторины. Если викторина не найдена —
-     * выбрасывает {@link ResourceNotFoundException}.
+     * выбрасывает {@link ResourceNotFoundException}. Варианты загружаются
+     * в транзакции для вычисления количества в DTO.
      * </p>
      *
      * @param quizId идентификатор викторины
@@ -384,7 +389,9 @@ public class QuizService {
             throw new ResourceNotFoundException(
                     "Викторина с идентификатором " + quizId + " не найдена");
         }
-        return questionRepository.findByQuizId(quizId);
+        List<Question> questions = questionRepository.findByQuizId(quizId);
+        questions.forEach(question -> question.getOptions().size());
+        return questions;
     }
 
     /**

@@ -111,6 +111,7 @@ public class QuestionService {
      * Возвращает вопрос по идентификатору.
      * <p>
      * Если вопрос не найден — выбрасывает {@link ResourceNotFoundException}.
+     * Варианты загружаются внутри транзакции для формирования DTO вне неё.
      * </p>
      *
      * @param questionId идентификатор вопроса
@@ -119,9 +120,11 @@ public class QuestionService {
      */
     @Transactional(readOnly = true)
     public Question findQuestion(Long questionId) {
-        return questionRepository.findById(questionId)
+        Question question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Вопрос с идентификатором " + questionId + " не найден"));
+        question.getOptions().size();
+        return question;
     }
 
     /**
