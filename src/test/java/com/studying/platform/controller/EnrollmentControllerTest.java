@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * а также обработку несуществующих объектов.
  * </p>
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.jpa.open-in-view=false")
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 class EnrollmentControllerTest {
@@ -191,6 +191,8 @@ class EnrollmentControllerTest {
                 EnrollmentResponseDto.class);
         assertNotNull(response.getId(), "ID записи не должен быть null");
         assertEquals("ACTIVE", response.getStatus());
+        transactions.executeWithoutResult(status -> assertEquals(response.getId(), jdbcTemplate.queryForObject(
+                "select id from enrollments where user_id = ? and course_id = ?", Long.class, studentId, courseId)));
     }
 
     /**
@@ -220,8 +222,9 @@ class EnrollmentControllerTest {
         perform(get("/api/enrollments/courses/" + courseId + "/students"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].studentId").value(studentId1))
-                .andExpect(jsonPath("$[1].studentId").value(studentId2));
+                .andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.containsInAnyOrder(studentId1.intValue(), studentId2.intValue())))
+                .andExpect(jsonPath("$[*].email", org.hamcrest.Matchers.containsInAnyOrder("student1-students@test.io", "student2-students@test.io")))
+                .andExpect(jsonPath("$[*].role", org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is("STUDENT"))));
     }
 
     /**
@@ -250,7 +253,98 @@ class EnrollmentControllerTest {
 
         perform(get("/api/enrollments/users/" + studentId + "/courses"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.containsInAnyOrder(courseId1.intValue(), courseId2.intValue())))
+                .andExpect(jsonPath("$[*].description", org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is("Описание курса"))));
+    }
+
+    /** Проверяет идентификаторы и поля ресурсов, фильтрацию ACTIVE и пустые списки без OSIV. */
+    @Test
+    void lists_returnOnlyActiveResourcesWithCompleteFields() throws Exception {
+        Long teacher = createUser("teacher-lists@test.io", UserRole.TEACHER);
+        Long category = createCategory("Категория изоляции списков");
+        Long course1 = createCourse(teacher, category);
+        Long course2 = createCourse(teacher, category);
+        Long courseDropped = createCourse(teacher, category);
+        Long emptyCourse = createCourse(teacher, category);
+        Long student1 = createUser("student-lists-1@test.io", UserRole.STUDENT);
+        Long student2 = createUser("student-lists-2@test.io", UserRole.STUDENT);
+        Long droppedStudent = createUser("student-lists-drop@test.io", UserRole.STUDENT);
+        Long emptyStudent = createUser("student-lists-empty@test.io", UserRole.STUDENT);
+
+        long enrollment1 = enroll(student1, course1);
+        if (enrollment1 == student1) {
+            Long noiseCourse = createCourse(teacher, category);
+            Long noiseStudent = createUser("student-lists-noise@test.io", UserRole.STUDENT);
+            enroll(noiseStudent, noiseCourse);
+        }
+        long enrollment2 = enroll(student2, course1);
+        enroll(droppedStudent, course1);
+        long course2Enrollment = enroll(student1, course2);
+        enroll(student1, courseDropped);
+        assertTrue(enrollment1 != student1 || enrollment2 != student2,
+                "Хотя бы один ID студента должен отличаться от ID его записи");
+        assertTrue(enrollment1 != course1 || course2Enrollment != course2,
+                "Хотя бы один ID курса должен отличаться от ID его записи");
+        perform(delete("/api/enrollments").param("studentId", droppedStudent.toString())
+                .param("courseId", course1.toString())).andExpect(status().isNoContent());
+        perform(delete("/api/enrollments").param("studentId", student1.toString())
+                .param("courseId", courseDropped.toString())).andExpect(status().isNoContent());
+
+        transactions.executeWithoutResult(status -> assertEquals(enrollment1, jdbcTemplate.queryForObject(
+                "select id from enrollments where user_id = ? and course_id = ?", Long.class, student1, course1)));
+        var students = objectMapper.readTree(perform(get("/api/enrollments/courses/" + course1 + "/students"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(2, students.size());
+        java.util.Set<com.fasterxml.jackson.databind.JsonNode> actualStudents = new java.util.HashSet<>();
+        students.forEach(actualStudents::add);
+        assertEquals(java.util.Set.of(
+                objectMapper.readTree(objectMapper.writeValueAsString(Map.of("id", student1, "email", "student-lists-1@test.io", "role", "STUDENT"))),
+                objectMapper.readTree(objectMapper.writeValueAsString(Map.of("id", student2, "email", "student-lists-2@test.io", "role", "STUDENT")))), actualStudents);
+
+        var courses = objectMapper.readTree(perform(get("/api/enrollments/users/" + student1 + "/courses"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(2, courses.size());
+        java.util.Set<com.fasterxml.jackson.databind.JsonNode> actualCourses = new java.util.HashSet<>();
+        courses.forEach(actualCourses::add);
+        assertEquals(java.util.Set.of(courseSummary(course1), courseSummary(course2)), actualCourses);
+        perform(get("/api/enrollments/courses/" + emptyCourse + "/students"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        perform(get("/api/enrollments/users/" + emptyStudent + "/courses"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        perform(get("/api/enrollments/courses/999999999/students")).andExpect(status().isNotFound());
+        perform(get("/api/enrollments/users/999999999/courses")).andExpect(status().isNotFound());
+    }
+
+    /**
+     * Создаёт запись через HTTP и возвращает именно её идентификатор.
+     *
+     * @param studentId идентификатор студента
+     * @param courseId идентификатор курса
+     * @return идентификатор записи
+     * @throws Exception если запрос или разбор ответа завершился ошибкой
+     */
+    private long enroll(Long studentId, Long courseId) throws Exception {
+        MvcResult result = perform(post("/api/enrollments").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new EnrollmentRequestDto(studentId, courseId))))
+                .andExpect(status().isCreated()).andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").longValue();
+    }
+
+    /**
+     * Формирует ожидаемые краткие данные курса на основе чтения базы.
+     *
+     * @param courseId идентификатор курса
+     * @return JSON-объект с ID, названием и описанием
+     * @throws Exception если данные курса не удалось преобразовать в JSON
+     */
+    private com.fasterxml.jackson.databind.JsonNode courseSummary(Long courseId) throws Exception {
+        Map<String, Object> summary = transactions.execute(status -> {
+            Map<String, Object> course = jdbcTemplate.queryForMap(
+                    "select title, description from courses where id = ?", courseId);
+            return Map.of("id", courseId, "title", course.get("title"), "description", course.get("description"));
+        });
+        return objectMapper.readTree(objectMapper.writeValueAsString(summary));
     }
 
     /**

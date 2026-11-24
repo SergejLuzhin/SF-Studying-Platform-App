@@ -2,6 +2,8 @@ package com.studying.platform.controller;
 
 import com.studying.platform.dto.EnrollmentRequestDto;
 import com.studying.platform.dto.EnrollmentResponseDto;
+import com.studying.platform.dto.CourseSummaryDto;
+import com.studying.platform.dto.UserResponseDto;
 import com.studying.platform.entity.Enrollment;
 import com.studying.platform.entity.User;
 import com.studying.platform.repository.CourseRepository;
@@ -88,18 +90,18 @@ public class EnrollmentController {
     /**
      * Получает список студентов, активно записанных на указанный курс.
      * <p>
-     * Метод выполняется внутри транзакции сервисного слоя, которая
-     * использует {@code EntityGraph} для загрузки связанных пользователей.
+     * Сервис загружает пользователей через {@code EntityGraph} в транзакции;
+     * возвращаются ID, email и роль каждого активно записанного студента.
      * </p>
      *
      * @param courseId идентификатор курса
      * @return HTTP 200 со списком DTO студентов курса
      */
     @GetMapping("/courses/{courseId}/students")
-    public ResponseEntity<List<EnrollmentResponseDto>> getCourseStudents(@PathVariable Long courseId) {
+    public ResponseEntity<List<UserResponseDto>> getCourseStudents(@PathVariable Long courseId) {
         List<User> students = enrollmentService.getCourseStudents(courseId);
-        List<EnrollmentResponseDto> response = students.stream()
-                .map(this::toEnrollmentResponseDto)
+        List<UserResponseDto> response = students.stream()
+                .map(student -> new UserResponseDto(student.getId(), student.getEmail(), student.getRole()))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(response);
     }
@@ -107,18 +109,18 @@ public class EnrollmentController {
     /**
      * Получает список курсов, на которые активно записан указанный студент.
      * <p>
-     * Метод выполняется внутри транзакции сервисного слоя, которая
-     * использует {@code EntityGraph} для загрузки связанных курсов.
+     * Сервис загружает курсы через {@code EntityGraph} в транзакции;
+     * возвращаются ID, название и описание каждого активного курса.
      * </p>
      *
      * @param userId идентификатор студента
      * @return HTTP 200 со списком DTO курсов студента
      */
     @GetMapping("/users/{userId}/courses")
-    public ResponseEntity<List<EnrollmentResponseDto>> getStudentCourses(@PathVariable Long userId) {
+    public ResponseEntity<List<CourseSummaryDto>> getStudentCourses(@PathVariable Long userId) {
         List<com.studying.platform.entity.Course> courses = enrollmentService.getStudentCourses(userId);
-        List<EnrollmentResponseDto> response = courses.stream()
-                .map(this::toCourseEnrollmentResponseDto)
+        List<CourseSummaryDto> response = courses.stream()
+                .map(course -> new CourseSummaryDto(course.getId(), course.getTitle(), course.getDescription()))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(response);
     }
@@ -163,44 +165,4 @@ public class EnrollmentController {
         );
     }
 
-    /**
-     * Преобразует сущность пользователя (студента) в DTO ответа записи.
-     * <p>
-     * Используется для ответа GET /courses/{courseId}/students.
-     * Копирует идентификатор, email и роль студента.
-     * </p>
-     *
-     * @param student сущность студента
-     * @return DTO ответа с данными студента
-     */
-    private EnrollmentResponseDto toEnrollmentResponseDto(User student) {
-        return new EnrollmentResponseDto(
-                student.getId(),
-                student.getId(),
-                null,
-                null,
-                null
-        );
-    }
-
-    /**
-     * Преобразует сущность курса в DTO ответа записи.
-     * <p>
-     * Используется для ответа GET /users/{userId}/courses.
-     * Копирует идентификатор, название и описание курса.
-     * </p>
-     *
-     * @param course сущность курса
-     * @return DTO ответа с данными курса
-     */
-    private EnrollmentResponseDto toCourseEnrollmentResponseDto(
-            com.studying.platform.entity.Course course) {
-        return new EnrollmentResponseDto(
-                course.getId(),
-                null,
-                course.getId(),
-                null,
-                null
-        );
-    }
 }
