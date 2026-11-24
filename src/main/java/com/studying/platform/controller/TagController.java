@@ -5,6 +5,7 @@ import com.studying.platform.dto.TagResponseDto;
 import com.studying.platform.entity.Tag;
 import com.studying.platform.exception.ResourceNotFoundException;
 import com.studying.platform.repository.TagRepository;
+import com.studying.platform.service.TagService;
 
 import jakarta.validation.Valid;
 
@@ -40,13 +41,18 @@ public class TagController {
      */
     private final TagRepository tagRepository;
 
+    /** Сервис транзакционного удаления тега и его связей. */
+    private final TagService tagService;
+
     /**
      * Конструктор контроллера с внедрением зависимостей через конструктор.
      *
      * @param tagRepository репозиторий тегов
+     * @param tagService сервис управления тегами
      */
-    public TagController(TagRepository tagRepository) {
+    public TagController(TagRepository tagRepository, TagService tagService) {
         this.tagRepository = tagRepository;
+        this.tagService = tagService;
     }
 
     /**
@@ -126,7 +132,7 @@ public class TagController {
      * Удаляет тег по идентификатору.
      * <p>
      * Проверяет существование тега. Если тег не найден — ошибка 404.
-     * Связи с курсами (таблица course_tag) удаляются автоматически через каскад.
+     * Связи этого тега с курсами удаляются в одной транзакции; курсы и другие теги сохраняются.
      * </p>
      *
      * @param tagId идентификатор тега для удаления
@@ -134,11 +140,7 @@ public class TagController {
      */
     @DeleteMapping("/{tagId}")
     public ResponseEntity<Void> deleteTag(@PathVariable Long tagId) {
-        if (!tagRepository.existsById(tagId)) {
-            throw new ResourceNotFoundException(
-                    "Тег с идентификатором " + tagId + " не найден");
-        }
-        tagRepository.deleteById(tagId);
+        tagService.deleteTag(tagId);
         return ResponseEntity.noContent().build();
     }
 

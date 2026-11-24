@@ -1111,6 +1111,98 @@ class QuizReviewTagControllerTest {
                 .andExpect(status().isNoContent());
     }
 
+    /**
+     * Проверяет адресное управление связями и удаление общего тега после завершения запросов.
+     *
+     * @throws Exception если HTTP-запрос завершился ошибкой
+     */
+    @Test
+    void courseTagLinksAndDeletionPreserveOtherResources() throws Exception {
+        Long teacher = createUser("tag-links@example.com", UserRole.TEACHER);
+        Long category = createCategory("Tag links");
+        Long first = createCourse(teacher, category);
+        Long second = createCourse(teacher, category);
+        Long shared = createTagForLinks("Shared link");
+        Long other = createTagForLinks("Other link");
+        String sharedBody = "[" + shared + "]";
+        perform(post("/api/courses/{id}/tags", first).contentType(MediaType.APPLICATION_JSON)
+                .content("[" + shared + "," + other + "]")).andExpect(status().isNoContent());
+        perform(post("/api/courses/{id}/tags", second).contentType(MediaType.APPLICATION_JSON)
+                .content(sharedBody)).andExpect(status().isNoContent());
+        perform(post("/api/courses/{id}/tags", second).contentType(MediaType.APPLICATION_JSON)
+                .content(sharedBody)).andExpect(status().isNoContent());
+        assertEquals(2, linkCount(shared));
+        perform(delete("/api/courses/{id}/tags", first).contentType(MediaType.APPLICATION_JSON)
+                .content(sharedBody)).andExpect(status().isNoContent());
+        assertEquals(1, linkCount(shared));
+        perform(get("/api/tags/{id}", shared)).andExpect(status().isOk());
+        perform(delete("/api/tags/{id}", shared)).andExpect(status().isNoContent());
+        assertEquals(0, linkCount(shared));
+        assertEquals(1, linkCount(other));
+        perform(get("/api/courses/{id}", first)).andExpect(status().isOk());
+        perform(get("/api/courses/{id}", second)).andExpect(status().isOk());
+        perform(get("/api/tags/{id}", other)).andExpect(status().isOk());
+        perform(get("/api/tags/{id}", shared)).andExpect(status().isNotFound());
+    }
+
+    /**
+     * Проверяет ошибки входа и атомарность добавления и удаления набора тегов.
+     *
+     * @throws Exception если HTTP-запрос завершился ошибкой
+     */
+    @Test
+    void courseTagLinksRejectInvalidAndMissingIdsWithoutChanges() throws Exception {
+        Long teacher = createUser("tag-invalid@example.com", UserRole.TEACHER);
+        Long category = createCategory("Invalid links");
+        Long course = createCourse(teacher, category);
+        Long tag = createTagForLinks("Valid link");
+        long missing = Long.MAX_VALUE;
+        for (String body : new String[]{"[]", "[null]", "[0]", "[-1]"}) {
+            perform(post("/api/courses/{id}/tags", course).contentType(MediaType.APPLICATION_JSON)
+                    .content(body)).andExpect(status().isBadRequest());
+            perform(delete("/api/courses/{id}/tags", course).contentType(MediaType.APPLICATION_JSON)
+                    .content(body)).andExpect(status().isBadRequest());
+        }
+        String mixed = "[" + tag + "," + missing + "]";
+        perform(post("/api/courses/{id}/tags", course).contentType(MediaType.APPLICATION_JSON)
+                .content(mixed)).andExpect(status().isNotFound());
+        assertEquals(0, linkCount(tag));
+        perform(post("/api/courses/{id}/tags", course).contentType(MediaType.APPLICATION_JSON)
+                .content("[" + tag + "]")).andExpect(status().isNoContent());
+        perform(delete("/api/courses/{id}/tags", course).contentType(MediaType.APPLICATION_JSON)
+                .content(mixed)).andExpect(status().isNotFound());
+        assertEquals(1, linkCount(tag));
+        perform(post("/api/courses/{id}/tags", missing).contentType(MediaType.APPLICATION_JSON)
+                .content("[" + tag + "]")).andExpect(status().isNotFound());
+        perform(delete("/api/courses/{id}/tags", missing).contentType(MediaType.APPLICATION_JSON)
+                .content("[" + tag + "]")).andExpect(status().isNotFound());
+        perform(delete("/api/tags/{id}", missing)).andExpect(status().isNotFound());
+    }
+
+    /**
+     * Создаёт отслеживаемый тег для тестов связей.
+     *
+     * @param name название тега
+     * @return идентификатор созданного тега
+     * @throws Exception если запрос или разбор ответа завершился ошибкой
+     */
+    private Long createTagForLinks(String name) throws Exception {
+        MvcResult result = perform(post("/api/tags").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new TagRequestDto(name))))
+                .andExpect(status().isCreated()).andReturn();
+        return objectMapper.readValue(result.getResponse().getContentAsString(), TagResponseDto.class).getId();
+    }
+
+    /**
+     * Подсчитывает сохранённые связи указанного тега через отдельный запрос к БД.
+     *
+     * @param tagId идентификатор тега
+     * @return число связей
+     */
+    private int linkCount(Long tagId) {
+        return jdbcTemplate.queryForObject("select count(*) from course_tag where tag_id = ?", Integer.class, tagId);
+    }
+
     // ==================== Негативные сценарии ====================
 
     /**

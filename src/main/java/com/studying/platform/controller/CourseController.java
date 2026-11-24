@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -146,6 +147,48 @@ public class CourseController {
     public ResponseEntity<Void> deleteCourse(@PathVariable Long courseId) {
         courseService.deleteCourse(courseId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Привязывает теги из непустого JSON-массива положительных идентификаторов,
+     * например {@code [1, 2]}. Повторная привязка не создаёт дубликатов.
+     *
+     * @param courseId идентификатор курса
+     * @param tagIds идентификаторы существующих тегов
+     * @return HTTP 204; при неверном списке HTTP 400, при отсутствии курса или тега HTTP 404
+     */
+    @PostMapping("/{courseId}/tags")
+    public ResponseEntity<Void> addTags(@PathVariable Long courseId, @RequestBody Set<Long> tagIds) {
+        validateTagIds(tagIds);
+        courseService.addTagsToCourse(courseId, tagIds);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Отвязывает теги из непустого JSON-массива положительных идентификаторов,
+     * например {@code [1, 2]}, не удаляя сами теги.
+     *
+     * @param courseId идентификатор курса
+     * @param tagIds идентификаторы существующих тегов
+     * @return HTTP 204; при неверном списке HTTP 400, при отсутствии курса или тега HTTP 404
+     */
+    @DeleteMapping("/{courseId}/tags")
+    public ResponseEntity<Void> removeTags(@PathVariable Long courseId, @RequestBody Set<Long> tagIds) {
+        validateTagIds(tagIds);
+        courseService.removeTagsFromCourse(courseId, tagIds);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Проверяет непустой набор положительных идентификаторов тегов.
+     *
+     * @param tagIds полученные идентификаторы
+     * @throws IllegalArgumentException если список пуст или содержит недопустимый идентификатор
+     */
+    private void validateTagIds(Set<Long> tagIds) {
+        if (tagIds == null || tagIds.isEmpty() || tagIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("Необходимо указать непустой список положительных идентификаторов тегов");
+        }
     }
 
     /**
