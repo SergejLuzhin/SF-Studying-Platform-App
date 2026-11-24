@@ -62,10 +62,11 @@ public class AssignmentController {
      * Создаёт новое задание для указанного урока.
      * <p>
      * Принимает DTO с валидацией. Создаёт задание через сервисный слой,
-     * проверяя существование урока.
+     * проверяя существование урока. Если необязательный lessonId в теле указан,
+     * он должен совпадать с идентификатором в пути; иначе возвращается HTTP 400.
      * </p>
      *
-     * @param lessonId идентификатор урока
+     * @param lessonId идентификатор урока из пути, определяющий родителя задания
      * @param dto      данные задания
      * @return HTTP 201 с DTO созданного задания
      */
@@ -73,6 +74,9 @@ public class AssignmentController {
     public ResponseEntity<AssignmentResponseDto> createAssignment(
             @PathVariable Long lessonId,
             @Valid @RequestBody AssignmentRequestDto dto) {
+        if (dto.getLessonId() != null && !lessonId.equals(dto.getLessonId())) {
+            throw new IllegalArgumentException("Идентификатор урока в теле должен совпадать с путём");
+        }
         Assignment assignment = assignmentService.createAssignment(
                 lessonId,
                 dto.getTitle(),
@@ -103,7 +107,8 @@ public class AssignmentController {
     /**
      * Обновляет данные существующего задания.
      * <p>
-     * Принимает DTO с не-null полями. Обновляет только указанные поля.
+     * Название обязательно; сервис обновляет остальные указанные не-null поля.
+     * Необязательный lessonId из тела игнорируется и не меняет родителя задания.
      * </p>
      *
      * @param assignmentId идентификатор задания

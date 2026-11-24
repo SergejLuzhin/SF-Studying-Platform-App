@@ -196,6 +196,50 @@ class AssignmentControllerTest {
     }
 
     /**
+     * Проверяет выбор урока из пути, совместимость и неизменность родителя при обновлении.
+     *
+     * @throws Exception если HTTP-запрос или чтение ответа завершились ошибкой
+     */
+    @Test
+    void assignmentLessonComesFromPathAndCannotBeChanged() throws Exception {
+        Long teacher = createUser("teacher-lesson-path@test.io", UserRole.TEACHER);
+        Long category = createCategory("Категория проверки урока");
+        Long course = createCourse(teacher, category);
+        Long module = addModuleToCourse(course, "Модуль", 1);
+        Long lesson = addLessonToModule(module, "Первый урок", "Содержание", null);
+        Long otherLesson = addLessonToModule(module, "Второй урок", "Содержание", null);
+        String path = "/api/assignments/lessons/" + lesson + "/assignments";
+
+        MvcResult created = perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Без ID\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.lessonId").value(lesson))
+                .andReturn();
+        Long assignment = objectMapper.readValue(created.getResponse().getContentAsString(),
+                AssignmentResponseDto.class).getId();
+        perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Совпадает\",\"lessonId\":" + lesson + "}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.lessonId").value(lesson));
+        int count = jdbcTemplate.queryForObject("select count(*) from assignments where lesson_id = ?",
+                Integer.class, lesson);
+        perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Не совпадает\",\"lessonId\":" + otherLesson + "}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(count, jdbcTemplate.queryForObject(
+                "select count(*) from assignments where lesson_id = ?", Integer.class, lesson));
+        perform(post("/api/assignments/lessons/{id}/assignments", Long.MAX_VALUE)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Нет урока\"}"))
+                .andExpect(status().isNotFound());
+        perform(put("/api/assignments/{id}", assignment).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Обновлено\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.lessonId").value(lesson));
+        perform(put("/api/assignments/{id}", assignment).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Без переноса\",\"lessonId\":" + otherLesson + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.lessonId").value(lesson));
+        assertEquals(lesson, jdbcTemplate.queryForObject(
+                "select lesson_id from assignments where id = ?", Long.class, assignment));
+    }
+
+    /**
      * Позитивный тест: создание задания для урока (HTTP 201).
      */
     @Test

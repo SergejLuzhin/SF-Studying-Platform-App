@@ -31,7 +31,7 @@
 | 6 | Доработать варианты ответов и удаление вопросов | `completed` |
 | 7 | Доработать связь тегов с курсом и удаление тегов | `completed` |
 | 8 | Исправить клиентские ошибки и ответы API | `completed` |
-| 9 | Устранить неоднозначность ID урока при работе с заданиями | `pending` |
+| 9 | Устранить неоднозначность ID урока при работе с заданиями | `completed` |
 | 10 | Проверить REST без Open Session in View | `pending` |
 | 11 | Исправить JavaDoc и документацию | `pending` |
 | 12 | Итоговая сквозная приёмка и checkpoint | `pending` |
@@ -176,7 +176,7 @@
 
 **Проверки:** `PASS` — `RestApiTests`, `GlobalExceptionHandlerTest`, `QuizReviewTagControllerTest` (106 тестов); `PASS` — `mvn -o verify` (453 теста, 0 ошибок и пропусков) на Java 23 и PostgreSQL Testcontainers; `PASS` — `git diff --check`. Неожиданная ошибка проверена через изолированный тестовый контроллер.
 
-## 9. Убрать неоднозначность ID урока в заданиях — `pending`
+## 9. Убрать неоднозначность ID урока в заданиях — `completed`
 
 **Проблема:** путь содержит `lessonId`, но `AssignmentRequestDto` требует его же в теле; контроллер использует только ID из пути.
 
@@ -189,6 +189,8 @@
 5. Запустить `AssignmentControllerTest` и `mvn verify`.
 
 **Готово, когда:** путь и тело не противоречат друг другу, API не требует дублирования и не привязывает задание к неожиданному уроку.
+
+**Проверки:** `PASS` — `AssignmentControllerTest` (12 тестов); `PASS` — `mvn -o verify` (454 теста, 0 ошибок и пропусков) на Java 23 и PostgreSQL Testcontainers; `PASS` — `git diff --check`. Для совместимости необязательный `lessonId` в теле PUT игнорируется и не меняет родителя.
 
 ## 10. Проверить REST без Open Session in View — `pending`
 
