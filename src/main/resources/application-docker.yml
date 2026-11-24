@@ -1,0 +1,21 @@
+# Профиль «docker» — запуск в Docker-сети
+#
+# Подключается к PostgreSQL по имени сервиса «postgres» в Docker Compose.
+# DDL-автоматизация: update (создание/обновление схемы при старте).
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/studying_platform
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
