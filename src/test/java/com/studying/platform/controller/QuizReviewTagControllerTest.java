@@ -79,14 +79,10 @@ class QuizReviewTagControllerTest {
     @Autowired
     private jakarta.persistence.EntityManager entityManager;
 
-    private final java.util.List<Long> createdUserIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdCourseIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdTagIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdQuizIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdQuestionIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdOptionIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdReviewIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdSubmissionIds = new java.util.ArrayList<>();
+    /** Идентификаторы ресурсов, созданных текущим тестом. */
+    private final com.studying.platform.HttpFixtureTracker fixtureTracker =
+            new com.studying.platform.HttpFixtureTracker();
+
 
     /**
      * Очищает кэш Hibernate перед каждым тестом, чтобы данные из EntityGraph
@@ -102,53 +98,20 @@ class QuizReviewTagControllerTest {
      */
     @AfterEach
     void cleanUp() {
-        transactions.executeWithoutResult(status -> {
-            // Удаляем по зависимостям — от самых вложенных к корню
-            jdbcTemplate.update("delete from quizsubmission");
-            for (Long id : createdSubmissionIds) {
-                jdbcTemplate.update("delete from quizsubmission where id = ?", id);
-            }
-            jdbcTemplate.update("delete from course_reviews");
-            for (Long id : createdReviewIds) {
-                jdbcTemplate.update("delete from course_reviews where id = ?", id);
-            }
-            jdbcTemplate.update("delete from answeroption");
-            for (Long id : createdOptionIds) {
-                jdbcTemplate.update("delete from answeroption where id = ?", id);
-            }
-            jdbcTemplate.update("delete from question");
-            for (Long id : createdQuestionIds) {
-                jdbcTemplate.update("delete from question where id = ?", id);
-            }
-            jdbcTemplate.update("delete from quiz");
-            for (Long id : createdQuizIds) {
-                jdbcTemplate.update("delete from quiz where id = ?", id);
-            }
-            // Удаляем все модули — они привязаны к курсам, которые будут удалены
-            jdbcTemplate.update("delete from modules");
-            jdbcTemplate.update("delete from course_tag");
-            jdbcTemplate.update("delete from tags");
-            for (Long id : createdTagIds) {
-                jdbcTemplate.update("delete from tags where id = ?", id);
-            }
-            jdbcTemplate.update("delete from enrollments");
-            for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
-            }
-            for (int i = createdUserIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from users where id = ?", createdUserIds.get(i));
-            }
-            createdUserIds.clear();
-            createdCourseIds.clear();
-            createdTagIds.clear();
-            createdQuizIds.clear();
-            createdQuestionIds.clear();
-            createdOptionIds.clear();
-            createdReviewIds.clear();
-            createdSubmissionIds.clear();
-        });
-        // Сбрасываем кэш Hibernate, чтобы данные из EntityGraph не мешали следующему тесту
+        fixtureTracker.clean(jdbcTemplate, transactions);
         entityManager.clear();
+    }
+
+    /**
+     * Выполняет запрос и сразу регистрирует созданный ресурс до проверок ответа.
+     *
+     * @param request запрос MockMvc
+     * @return результат для последующих проверок
+     * @throws Exception если выполнение запроса или чтение идентификатора завершилось ошибкой
+     */
+    private org.springframework.test.web.servlet.ResultActions perform(
+            org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        return mockMvc.perform(request).andDo(result -> fixtureTracker.record(result, objectMapper));
     }
 
     /**
@@ -164,7 +127,7 @@ class QuizReviewTagControllerTest {
         dto.setEmail(email);
         dto.setRole(role);
 
-        MvcResult result = mockMvc.perform(post("/api/users")
+        MvcResult result = perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -174,7 +137,6 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.UserResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.UserResponseDto.class);
-        createdUserIds.add(response.getId());
         return response.getId();
     }
 
@@ -188,7 +150,7 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto(name);
 
-        MvcResult result = mockMvc.perform(post("/api/categories")
+        MvcResult result = perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -217,7 +179,7 @@ class QuizReviewTagControllerTest {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        MvcResult result = mockMvc.perform(post("/api/courses")
+        MvcResult result = perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -227,7 +189,6 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.CourseResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.CourseResponseDto.class);
-        createdCourseIds.add(response.getId());
         return response.getId();
     }
 
@@ -245,7 +206,7 @@ class QuizReviewTagControllerTest {
         dto.setDescription("Описание модуля");
         dto.setOrderIndex(orderIndex);
 
-        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        MvcResult result = perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -266,7 +227,7 @@ class QuizReviewTagControllerTest {
      */
     private void enrollStudent(Long studentId, Long courseId) throws Exception {
         EnrollmentRequestDto dto = new EnrollmentRequestDto(studentId, courseId);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
@@ -286,7 +247,7 @@ class QuizReviewTagControllerTest {
 
         QuizRequestDto dto = new QuizRequestDto(moduleId, "Тест по модулю 1", 30);
 
-        MvcResult result = mockMvc.perform(post("/api/quiz")
+        MvcResult result = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -300,7 +261,6 @@ class QuizReviewTagControllerTest {
         QuizResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(response.getId());
         assertNotNull(response.getId());
     }
 
@@ -315,7 +275,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto createDto = new QuizRequestDto(moduleId, "Получаемый тест", 60);
-        MvcResult createResult = mockMvc.perform(post("/api/quiz")
+        MvcResult createResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createDto)))
                 .andExpect(status().isCreated())
@@ -324,9 +284,8 @@ class QuizReviewTagControllerTest {
         QuizResponseDto created = objectMapper.readValue(
                 createResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(created.getId());
 
-        mockMvc.perform(get("/api/quiz/" + created.getId()))
+        perform(get("/api/quiz/" + created.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Получаемый тест"))
                 .andExpect(jsonPath("$.timeLimit").value(60))
@@ -344,7 +303,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto createDto = new QuizRequestDto(moduleId, "Старое название", 30);
-        MvcResult createResult = mockMvc.perform(post("/api/quiz")
+        MvcResult createResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createDto)))
                 .andExpect(status().isCreated())
@@ -353,10 +312,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto created = objectMapper.readValue(
                 createResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(created.getId());
 
         QuizRequestDto updateDto = new QuizRequestDto(moduleId, "Новое название", 45);
-        mockMvc.perform(put("/api/quiz/" + created.getId())
+        perform(put("/api/quiz/" + created.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateDto)))
                 .andExpect(status().isOk())
@@ -375,7 +333,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto dto = new QuizRequestDto(moduleId, "Удаляемый тест", 30);
-        MvcResult result = mockMvc.perform(post("/api/quiz")
+        MvcResult result = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -384,9 +342,8 @@ class QuizReviewTagControllerTest {
         QuizResponseDto created = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(created.getId());
 
-        mockMvc.perform(delete("/api/quiz/" + created.getId()))
+        perform(delete("/api/quiz/" + created.getId()))
                 .andExpect(status().isNoContent());
     }
 
@@ -401,7 +358,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест с вопросами", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -410,10 +367,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Вопрос 1?", QuizQuestionType.SINGLE_CHOICE);
-        MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        MvcResult qResult = perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated())
@@ -425,7 +381,6 @@ class QuizReviewTagControllerTest {
         QuestionResponseDto question = objectMapper.readValue(
                 qResult.getResponse().getContentAsString(),
                 QuestionResponseDto.class);
-        createdQuestionIds.add(question.getId());
     }
 
     /**
@@ -439,7 +394,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для вопросов", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -448,22 +403,21 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         // Создаём 2 вопроса
         QuestionRequestDto qDto1 = new QuestionRequestDto("Вопрос A?", QuizQuestionType.SINGLE_CHOICE);
-        mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto1)))
                 .andExpect(status().isCreated());
 
         QuestionRequestDto qDto2 = new QuestionRequestDto("Вопрос B?", QuizQuestionType.MULTIPLE_CHOICE);
-        mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/quiz/" + quiz.getId() + "/questions"))
+        perform(get("/api/quiz/" + quiz.getId() + "/questions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -479,7 +433,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест с вариантами", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -488,10 +442,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Вопрос с вариантами?", QuizQuestionType.SINGLE_CHOICE);
-        MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        MvcResult qResult = perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated())
@@ -500,11 +453,10 @@ class QuizReviewTagControllerTest {
         QuestionResponseDto question = objectMapper.readValue(
                 qResult.getResponse().getContentAsString(),
                 QuestionResponseDto.class);
-        createdQuestionIds.add(question.getId());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto =
                 new com.studying.platform.dto.AnswerOptionRequestDto("Правильный ответ", true);
-        MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+        MvcResult optResult = perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto)))
                 .andExpect(status().isCreated())
@@ -516,7 +468,6 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.AnswerOptionResponseDto option = objectMapper.readValue(
                 optResult.getResponse().getContentAsString(),
                 com.studying.platform.dto.AnswerOptionResponseDto.class);
-        createdOptionIds.add(option.getId());
     }
 
     /**
@@ -530,7 +481,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для вариантов", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -539,10 +490,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Вопрос с вариантами?", QuizQuestionType.SINGLE_CHOICE);
-        MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        MvcResult qResult = perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated())
@@ -551,24 +501,23 @@ class QuizReviewTagControllerTest {
         QuestionResponseDto question = objectMapper.readValue(
                 qResult.getResponse().getContentAsString(),
                 QuestionResponseDto.class);
-        createdQuestionIds.add(question.getId());
 
         // Создаём 2 варианта
         com.studying.platform.dto.AnswerOptionRequestDto optDto1 =
                 new com.studying.platform.dto.AnswerOptionRequestDto("Ответ А", false);
-        mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+        perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto1)))
                 .andExpect(status().isCreated());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto2 =
                 new com.studying.platform.dto.AnswerOptionRequestDto("Ответ Б", true);
-        mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+        perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/question/" + question.getId() + "/options"))
+        perform(get("/api/question/" + question.getId() + "/options"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -584,7 +533,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для старта", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -593,15 +542,14 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Стартовый вопрос?", QuizQuestionType.SINGLE_CHOICE);
-        mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/quiz/" + quiz.getId() + "/start"))
+        perform(get("/api/quiz/" + quiz.getId() + "/start"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(quiz.getId()))
                 .andExpect(jsonPath("$.title").value("Тест для старта"))
@@ -623,7 +571,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для сдачи", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -632,10 +580,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Правильный?", QuizQuestionType.SINGLE_CHOICE);
-        MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        MvcResult qResult = perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated())
@@ -644,11 +591,10 @@ class QuizReviewTagControllerTest {
         QuestionResponseDto question = objectMapper.readValue(
                 qResult.getResponse().getContentAsString(),
                 QuestionResponseDto.class);
-        createdQuestionIds.add(question.getId());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto =
                 new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", true);
-        MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+        MvcResult optResult = perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto)))
                 .andExpect(status().isCreated())
@@ -657,7 +603,6 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.AnswerOptionResponseDto option = objectMapper.readValue(
                 optResult.getResponse().getContentAsString(),
                 com.studying.platform.dto.AnswerOptionResponseDto.class);
-        createdOptionIds.add(option.getId());
 
         Long studentId = createUser("student-sub-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
         enrollStudent(studentId, courseId);
@@ -666,7 +611,7 @@ class QuizReviewTagControllerTest {
                 studentId,
                 Map.of(question.getId(), Set.of(option.getId())));
 
-        MvcResult result = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/submit")
+        MvcResult result = perform(post("/api/quiz/" + quiz.getId() + "/submit")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated())
@@ -677,7 +622,6 @@ class QuizReviewTagControllerTest {
         QuizSubmissionResponseDto submission = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 QuizSubmissionResponseDto.class);
-        createdSubmissionIds.add(submission.getId());
     }
 
     /**
@@ -691,7 +635,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для получения", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -700,10 +644,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Вопрос?", QuizQuestionType.SINGLE_CHOICE);
-        MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        MvcResult qResult = perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated())
@@ -712,11 +655,10 @@ class QuizReviewTagControllerTest {
         QuestionResponseDto question = objectMapper.readValue(
                 qResult.getResponse().getContentAsString(),
                 QuestionResponseDto.class);
-        createdQuestionIds.add(question.getId());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto =
                 new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", true);
-        MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+        MvcResult optResult = perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto)))
                 .andExpect(status().isCreated())
@@ -725,7 +667,6 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.AnswerOptionResponseDto option = objectMapper.readValue(
                 optResult.getResponse().getContentAsString(),
                 com.studying.platform.dto.AnswerOptionResponseDto.class);
-        createdOptionIds.add(option.getId());
 
         Long studentId = createUser("student-sub-get-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
         enrollStudent(studentId, courseId);
@@ -734,7 +675,7 @@ class QuizReviewTagControllerTest {
                 studentId,
                 Map.of(question.getId(), Set.of(option.getId())));
 
-        MvcResult result = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/submit")
+        MvcResult result = perform(post("/api/quiz/" + quiz.getId() + "/submit")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated())
@@ -743,9 +684,8 @@ class QuizReviewTagControllerTest {
         QuizSubmissionResponseDto submission = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 QuizSubmissionResponseDto.class);
-        createdSubmissionIds.add(submission.getId());
 
-        mockMvc.perform(get("/api/submissions/quiz/" + submission.getId()))
+        perform(get("/api/submissions/quiz/" + submission.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quizId").value(quiz.getId()))
                 .andExpect(jsonPath("$.studentId").value(studentId))
@@ -765,7 +705,7 @@ class QuizReviewTagControllerTest {
 
         CourseReviewRequestDto dto = new CourseReviewRequestDto(studentId, courseId, 5, "Отличный курс!");
 
-        MvcResult result = mockMvc.perform(post("/api/course-reviews")
+        MvcResult result = perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -777,7 +717,6 @@ class QuizReviewTagControllerTest {
         CourseReviewResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 CourseReviewResponseDto.class);
-        createdReviewIds.add(response.getId());
     }
 
     /**
@@ -794,18 +733,18 @@ class QuizReviewTagControllerTest {
         enrollStudent(studentId2, courseId);
 
         CourseReviewRequestDto dto1 = new CourseReviewRequestDto(studentId1, courseId, 4, "Хороший курс");
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
 
         CourseReviewRequestDto dto2 = new CourseReviewRequestDto(studentId2, courseId, 5, "Превосходно!");
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/course-reviews/course/" + courseId))
+        perform(get("/api/course-reviews/course/" + courseId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -817,7 +756,7 @@ class QuizReviewTagControllerTest {
     void createTag_shouldReturn201() throws Exception {
         TagRequestDto dto = new TagRequestDto("Java");
 
-        MvcResult result = mockMvc.perform(post("/api/tags")
+        MvcResult result = perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -828,7 +767,6 @@ class QuizReviewTagControllerTest {
         TagResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 TagResponseDto.class);
-        createdTagIds.add(response.getId());
     }
 
     /**
@@ -836,21 +774,22 @@ class QuizReviewTagControllerTest {
      */
     @Test
     void getTags_shouldReturn200() throws Exception {
-        TagRequestDto dto1 = new TagRequestDto("Java");
-        mockMvc.perform(post("/api/tags")
+        String suffix = java.util.UUID.randomUUID().toString();
+        TagRequestDto dto1 = new TagRequestDto("Java-" + suffix);
+        perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
 
-        TagRequestDto dto2 = new TagRequestDto("Hibernate");
-        mockMvc.perform(post("/api/tags")
+        TagRequestDto dto2 = new TagRequestDto("Hibernate-" + suffix);
+        perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/tags"))
+        perform(get("/api/tags"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$[*].name", org.hamcrest.Matchers.hasItems(dto1.getName(), dto2.getName())));
     }
 
     /**
@@ -859,7 +798,7 @@ class QuizReviewTagControllerTest {
     @Test
     void getTag_shouldReturn200() throws Exception {
         TagRequestDto dto = new TagRequestDto("Spring");
-        MvcResult result = mockMvc.perform(post("/api/tags")
+        MvcResult result = perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -868,9 +807,8 @@ class QuizReviewTagControllerTest {
         TagResponseDto tag = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 TagResponseDto.class);
-        createdTagIds.add(tag.getId());
 
-        mockMvc.perform(get("/api/tags/" + tag.getId()))
+        perform(get("/api/tags/" + tag.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Spring"));
     }
@@ -881,7 +819,7 @@ class QuizReviewTagControllerTest {
     @Test
     void updateTag_shouldReturn200() throws Exception {
         TagRequestDto createDto = new TagRequestDto("JavaSE");
-        MvcResult result = mockMvc.perform(post("/api/tags")
+        MvcResult result = perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createDto)))
                 .andExpect(status().isCreated())
@@ -890,10 +828,9 @@ class QuizReviewTagControllerTest {
         TagResponseDto tag = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 TagResponseDto.class);
-        createdTagIds.add(tag.getId());
 
         TagRequestDto updateDto = new TagRequestDto("JavaEE");
-        mockMvc.perform(put("/api/tags/" + tag.getId())
+        perform(put("/api/tags/" + tag.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateDto)))
                 .andExpect(status().isOk())
@@ -906,7 +843,7 @@ class QuizReviewTagControllerTest {
     @Test
     void deleteTag_shouldReturn204() throws Exception {
         TagRequestDto dto = new TagRequestDto("ToDelete");
-        MvcResult result = mockMvc.perform(post("/api/tags")
+        MvcResult result = perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -915,9 +852,8 @@ class QuizReviewTagControllerTest {
         TagResponseDto tag = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 TagResponseDto.class);
-        createdTagIds.add(tag.getId());
 
-        mockMvc.perform(delete("/api/tags/" + tag.getId()))
+        perform(delete("/api/tags/" + tag.getId()))
                 .andExpect(status().isNoContent());
     }
 
@@ -930,7 +866,7 @@ class QuizReviewTagControllerTest {
     void createQuiz_nonExistentModule_shouldReturn404() throws Exception {
         QuizRequestDto dto = new QuizRequestDto(99999L, "Тест без модуля", 30);
 
-        mockMvc.perform(post("/api/quiz")
+        perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -947,13 +883,13 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto dto1 = new QuizRequestDto(moduleId, "Первый тест", 30);
-        mockMvc.perform(post("/api/quiz")
+        perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
 
         QuizRequestDto dto2 = new QuizRequestDto(moduleId, "Второй тест", 30);
-        mockMvc.perform(post("/api/quiz")
+        perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isBadRequest());
@@ -971,7 +907,7 @@ class QuizReviewTagControllerTest {
 
         QuizRequestDto dto = new QuizRequestDto(moduleId, "", 30);
 
-        mockMvc.perform(post("/api/quiz")
+        perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -988,7 +924,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест с результатом", 30);
-        MvcResult quizResult = mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -997,10 +933,9 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 quizResult.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
         QuestionRequestDto qDto = new QuestionRequestDto("Вопрос?", QuizQuestionType.SINGLE_CHOICE);
-        MvcResult qResult = mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/questions")
+        MvcResult qResult = perform(post("/api/quiz/" + quiz.getId() + "/questions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(qDto)))
                 .andExpect(status().isCreated())
@@ -1009,11 +944,10 @@ class QuizReviewTagControllerTest {
         QuestionResponseDto question = objectMapper.readValue(
                 qResult.getResponse().getContentAsString(),
                 QuestionResponseDto.class);
-        createdQuestionIds.add(question.getId());
 
         com.studying.platform.dto.AnswerOptionRequestDto optDto =
                 new com.studying.platform.dto.AnswerOptionRequestDto("Ответ", true);
-        MvcResult optResult = mockMvc.perform(post("/api/question/" + question.getId() + "/options")
+        MvcResult optResult = perform(post("/api/question/" + question.getId() + "/options")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(optDto)))
                 .andExpect(status().isCreated())
@@ -1022,7 +956,6 @@ class QuizReviewTagControllerTest {
         com.studying.platform.dto.AnswerOptionResponseDto option = objectMapper.readValue(
                 optResult.getResponse().getContentAsString(),
                 com.studying.platform.dto.AnswerOptionResponseDto.class);
-        createdOptionIds.add(option.getId());
 
         Long studentId = createUser("student-delsub-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
         enrollStudent(studentId, courseId);
@@ -1030,12 +963,12 @@ class QuizReviewTagControllerTest {
         SubmitAnswersRequestDto submitDto = new SubmitAnswersRequestDto(
                 studentId,
                 Map.of(question.getId(), Set.of(option.getId())));
-        mockMvc.perform(post("/api/quiz/" + quiz.getId() + "/submit")
+        perform(post("/api/quiz/" + quiz.getId() + "/submit")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(delete("/api/quiz/" + quiz.getId()))
+        perform(delete("/api/quiz/" + quiz.getId()))
                 .andExpect(status().isBadRequest());
     }
 
@@ -1044,7 +977,7 @@ class QuizReviewTagControllerTest {
      */
     @Test
     void startQuiz_nonExistent_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/quiz/99999/start"))
+        perform(get("/api/quiz/99999/start"))
                 .andExpect(status().isNotFound());
     }
 
@@ -1054,7 +987,7 @@ class QuizReviewTagControllerTest {
     @Test
     void submitAnswers_nonExistentQuiz_shouldReturn404() throws Exception {
         SubmitAnswersRequestDto dto = new SubmitAnswersRequestDto(1L, Map.of());
-        mockMvc.perform(post("/api/quiz/99999/submit")
+        perform(post("/api/quiz/99999/submit")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1071,15 +1004,16 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для проверки записи", 30);
-        mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated()).andReturn();
+        long quizId = objectMapper.readTree(quizResult.getResponse().getContentAsString()).get("id").longValue();
 
         Long studentId = createUser("student-noenr-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
 
         SubmitAnswersRequestDto dto = new SubmitAnswersRequestDto(studentId, Map.of());
-        mockMvc.perform(post("/api/quiz/1/submit")
+        perform(post("/api/quiz/" + quizId + "/submit")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1096,17 +1030,18 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Тест для проверки студента", 30);
-        mockMvc.perform(post("/api/quiz")
+        MvcResult quizResult = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated()).andReturn();
+        long quizId = objectMapper.readTree(quizResult.getResponse().getContentAsString()).get("id").longValue();
 
         Long studentId = createUser("student-wrng-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
         Long otherStudentId = createUser("student-other-" + System.currentTimeMillis() + "@test.io", UserRole.STUDENT);
         enrollStudent(studentId, courseId);
 
         SubmitAnswersRequestDto dto = new SubmitAnswersRequestDto(otherStudentId, Map.of());
-        mockMvc.perform(post("/api/quiz/1/submit")
+        perform(post("/api/quiz/" + quizId + "/submit")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1121,7 +1056,7 @@ class QuizReviewTagControllerTest {
 
         CourseReviewRequestDto dto = new CourseReviewRequestDto(studentId, 99999L, 5, "Комментарий");
 
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1140,7 +1075,7 @@ class QuizReviewTagControllerTest {
 
         CourseReviewRequestDto dto = new CourseReviewRequestDto(studentId, courseId, 0, "Плохой рейтинг");
 
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -1158,13 +1093,13 @@ class QuizReviewTagControllerTest {
         enrollStudent(studentId, courseId);
 
         CourseReviewRequestDto dto = new CourseReviewRequestDto(studentId, courseId, 5, "Первый отзыв");
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
 
         CourseReviewRequestDto dto2 = new CourseReviewRequestDto(studentId, courseId, 4, "Повторный отзыв");
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isBadRequest());
@@ -1181,7 +1116,7 @@ class QuizReviewTagControllerTest {
 
         CourseReviewRequestDto dto = new CourseReviewRequestDto(teacherId, courseId, 5, "Отзыв преподавателя");
 
-        mockMvc.perform(post("/api/course-reviews")
+        perform(post("/api/course-reviews")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1193,13 +1128,13 @@ class QuizReviewTagControllerTest {
     @Test
     void createTag_duplicateName_shouldReturn400() throws Exception {
         TagRequestDto dto1 = new TagRequestDto("UniqueTag");
-        mockMvc.perform(post("/api/tags")
+        perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
 
         TagRequestDto dto2 = new TagRequestDto("UniqueTag");
-        mockMvc.perform(post("/api/tags")
+        perform(post("/api/tags")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isBadRequest());
@@ -1210,7 +1145,7 @@ class QuizReviewTagControllerTest {
      */
     @Test
     void deleteQuiz_nonExistent_shouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/quiz/99999"))
+        perform(delete("/api/quiz/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -1225,7 +1160,7 @@ class QuizReviewTagControllerTest {
         Long moduleId = createModule(courseId, 1);
 
         QuizRequestDto quizDto = new QuizRequestDto(moduleId, "Пустой тест", 30);
-        MvcResult result = mockMvc.perform(post("/api/quiz")
+        MvcResult result = perform(post("/api/quiz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(quizDto)))
                 .andExpect(status().isCreated())
@@ -1234,9 +1169,8 @@ class QuizReviewTagControllerTest {
         QuizResponseDto quiz = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 QuizResponseDto.class);
-        createdQuizIds.add(quiz.getId());
 
-        mockMvc.perform(get("/api/quiz/" + quiz.getId() + "/start"))
+        perform(get("/api/quiz/" + quiz.getId() + "/start"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -1247,7 +1181,7 @@ class QuizReviewTagControllerTest {
      */
     @Test
     void errorResponseFormat_shouldMatchErrorResponseDto() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/quiz/99999"))
+        MvcResult result = perform(get("/api/quiz/99999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Not Found"))

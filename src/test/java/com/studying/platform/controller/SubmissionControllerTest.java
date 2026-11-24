@@ -79,29 +79,29 @@ class SubmissionControllerTest {
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
-    private final java.util.List<Long> createdUserIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdCourseIds = new java.util.ArrayList<>();
+    /** Идентификаторы ресурсов, созданных текущим тестом. */
+    private final com.studying.platform.HttpFixtureTracker fixtureTracker =
+            new com.studying.platform.HttpFixtureTracker();
+
 
     /**
      * Очищает созданные тестом данные после каждого теста.
      */
     @AfterEach
     void cleanUp() {
-        transactions.executeWithoutResult(status -> {
-            jdbcTemplate.update("delete from submissions");
-            jdbcTemplate.update("delete from assignments");
-            jdbcTemplate.update("delete from lessons");
-            jdbcTemplate.update("delete from modules");
-            jdbcTemplate.update("delete from enrollments");
-            for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
-            }
-            for (int i = createdUserIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from users where id = ?", createdUserIds.get(i));
-            }
-            createdUserIds.clear();
-            createdCourseIds.clear();
-        });
+        fixtureTracker.clean(jdbcTemplate, transactions);
+    }
+
+    /**
+     * Выполняет запрос и сразу регистрирует созданный ресурс до проверок ответа.
+     *
+     * @param request запрос MockMvc
+     * @return результат для последующих проверок
+     * @throws Exception если выполнение запроса или чтение идентификатора завершилось ошибкой
+     */
+    private org.springframework.test.web.servlet.ResultActions perform(
+            org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        return mockMvc.perform(request).andDo(result -> fixtureTracker.record(result, objectMapper));
     }
 
     /**
@@ -112,7 +112,7 @@ class SubmissionControllerTest {
         dto.setEmail(email);
         dto.setRole(role);
 
-        MvcResult result = mockMvc.perform(post("/api/users")
+        MvcResult result = perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -121,7 +121,6 @@ class SubmissionControllerTest {
 
         UserResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(), UserResponseDto.class);
-        createdUserIds.add(response.getId());
         return response.getId();
     }
 
@@ -136,7 +135,7 @@ class SubmissionControllerTest {
         String name = baseName + "-" + catCounter.incrementAndGet();
         CategoryCreateDto dto = new CategoryCreateDto(name);
 
-        MvcResult result = mockMvc.perform(post("/api/categories")
+        MvcResult result = perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -159,7 +158,7 @@ class SubmissionControllerTest {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        MvcResult result = mockMvc.perform(post("/api/courses")
+        MvcResult result = perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -168,7 +167,6 @@ class SubmissionControllerTest {
 
         CourseResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(), CourseResponseDto.class);
-        createdCourseIds.add(response.getId());
         return response.getId();
     }
 
@@ -178,7 +176,7 @@ class SubmissionControllerTest {
     private Long addModuleToCourse(Long courseId, String title, int orderIndex) throws Exception {
         ModuleRequestDto dto = new ModuleRequestDto(title, "Описание", orderIndex);
 
-        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        MvcResult result = perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -195,7 +193,7 @@ class SubmissionControllerTest {
     private Long addLessonToModule(Long moduleId, String title, String content, String videoUrl) throws Exception {
         LessonRequestDto dto = new LessonRequestDto(title, content, videoUrl);
 
-        MvcResult result = mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        MvcResult result = perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -217,7 +215,7 @@ class SubmissionControllerTest {
         dto.setDueDate(LocalDate.of(2026, 6, 1));
         dto.setMaxScore(maxScore);
 
-        MvcResult result = mockMvc.perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
+        MvcResult result = perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -236,7 +234,7 @@ class SubmissionControllerTest {
         dto.setStudentId(studentId);
         dto.setCourseId(courseId);
 
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
@@ -274,7 +272,7 @@ class SubmissionControllerTest {
         dto.setStudentId(studentId);
         dto.setContent("Мое решение задачи");
 
-        MvcResult result = mockMvc.perform(post("/api/submissions")
+        MvcResult result = perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -310,7 +308,7 @@ class SubmissionControllerTest {
         submitDto.setStudentId(studentId);
         submitDto.setContent("Решение для оценивания");
 
-        MvcResult submitResult = mockMvc.perform(post("/api/submissions")
+        MvcResult submitResult = perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated())
@@ -324,7 +322,7 @@ class SubmissionControllerTest {
         gradeDto.setScore(85);
         gradeDto.setFeedback("Хорошая работа");
 
-        mockMvc.perform(patch("/api/submissions/" + submitted.getId())
+        perform(patch("/api/submissions/" + submitted.getId())
                         .param("teacherId", teacherId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(gradeDto)))
@@ -351,7 +349,7 @@ class SubmissionControllerTest {
         dto1.setAssignmentId(assignmentId);
         dto1.setStudentId(studentId1);
         dto1.setContent("Решение 1");
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
@@ -360,12 +358,12 @@ class SubmissionControllerTest {
         dto2.setAssignmentId(assignmentId);
         dto2.setStudentId(studentId2);
         dto2.setContent("Решение 2");
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/submissions/assignments/" + assignmentId + "/submissions"))
+        perform(get("/api/submissions/assignments/" + assignmentId + "/submissions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -386,7 +384,7 @@ class SubmissionControllerTest {
         dto1.setAssignmentId(data1[3]);
         dto1.setStudentId(studentId);
         dto1.setContent("Решение на курс 1");
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
@@ -395,12 +393,12 @@ class SubmissionControllerTest {
         dto2.setAssignmentId(data2[3]);
         dto2.setStudentId(studentId);
         dto2.setContent("Решение на курс 2");
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/submissions/users/" + studentId + "/submissions"))
+        perform(get("/api/submissions/users/" + studentId + "/submissions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -419,7 +417,7 @@ class SubmissionControllerTest {
         dto.setStudentId(studentId);
         dto.setContent("Решение");
 
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -439,7 +437,7 @@ class SubmissionControllerTest {
         dto.setStudentId(studentId);
         dto.setContent("Решение");
 
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -462,12 +460,12 @@ class SubmissionControllerTest {
         dto.setStudentId(studentId);
         dto.setContent("Решение 1");
 
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -491,7 +489,7 @@ class SubmissionControllerTest {
         submitDto.setStudentId(studentId);
         submitDto.setContent("Решение");
 
-        MvcResult submitResult = mockMvc.perform(post("/api/submissions")
+        MvcResult submitResult = perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated())
@@ -505,7 +503,7 @@ class SubmissionControllerTest {
         gradeDto.setScore(-1);
         gradeDto.setFeedback(null);
 
-        mockMvc.perform(patch("/api/submissions/" + submitted.getId())
+        perform(patch("/api/submissions/" + submitted.getId())
                         .param("teacherId", teacherId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(gradeDto)))
@@ -530,7 +528,7 @@ class SubmissionControllerTest {
         submitDto.setStudentId(studentId);
         submitDto.setContent("Решение");
 
-        MvcResult submitResult = mockMvc.perform(post("/api/submissions")
+        MvcResult submitResult = perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated())
@@ -544,7 +542,7 @@ class SubmissionControllerTest {
         gradeDto.setScore(150);
         gradeDto.setFeedback(null);
 
-        mockMvc.perform(patch("/api/submissions/" + submitted.getId())
+        perform(patch("/api/submissions/" + submitted.getId())
                         .param("teacherId", teacherId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(gradeDto)))
@@ -568,7 +566,7 @@ class SubmissionControllerTest {
         submitDto.setStudentId(studentId);
         submitDto.setContent("Решение");
 
-        MvcResult submitResult = mockMvc.perform(post("/api/submissions")
+        MvcResult submitResult = perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(submitDto)))
                 .andExpect(status().isCreated())
@@ -582,7 +580,7 @@ class SubmissionControllerTest {
         gradeDto.setScore(80);
         gradeDto.setFeedback("Комментарий");
 
-        mockMvc.perform(patch("/api/submissions/" + submitted.getId())
+        perform(patch("/api/submissions/" + submitted.getId())
                         .param("teacherId", studentId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(gradeDto)))
@@ -600,7 +598,7 @@ class SubmissionControllerTest {
         gradeDto.setScore(80);
         gradeDto.setFeedback("Комментарий");
 
-        mockMvc.perform(patch("/api/submissions/99999")
+        perform(patch("/api/submissions/99999")
                         .param("teacherId", teacherId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(gradeDto)))
@@ -612,7 +610,7 @@ class SubmissionControllerTest {
      */
     @Test
     void getSubmissionsByAssignment_nonExistent_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/submissions/assignments/99999/submissions"))
+        perform(get("/api/submissions/assignments/99999/submissions"))
                 .andExpect(status().isNotFound());
     }
 
@@ -621,7 +619,7 @@ class SubmissionControllerTest {
      */
     @Test
     void getSubmissionsByStudent_nonExistent_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/submissions/users/99999/submissions"))
+        perform(get("/api/submissions/users/99999/submissions"))
                 .andExpect(status().isNotFound());
     }
 
@@ -642,12 +640,12 @@ class SubmissionControllerTest {
         dto.setStudentId(studentId);
         dto.setContent("Решение");
 
-        mockMvc.perform(post("/api/submissions")
+        perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
 
-        MvcResult result = mockMvc.perform(post("/api/submissions")
+        MvcResult result = perform(post("/api/submissions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest())

@@ -60,25 +60,30 @@ class EnrollmentControllerTest {
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
-    private final java.util.List<Long> createdUserIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdCourseIds = new java.util.ArrayList<>();
+    /** Идентификаторы ресурсов, созданных текущим тестом. */
+    private final com.studying.platform.HttpFixtureTracker fixtureTracker =
+            new com.studying.platform.HttpFixtureTracker();
+
 
     /**
-     * Очищает созданные тестом данные после каждого теста.
+     * Удаляет записи только между созданными тестом пользователями и курсами,
+     * затем удаляет созданные курсы, категории и пользователей.
      */
     @AfterEach
     void cleanUp() {
-        transactions.executeWithoutResult(status -> {
-            jdbcTemplate.update("delete from enrollments");
-            for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
-            }
-            for (int i = createdUserIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from users where id = ?", createdUserIds.get(i));
-            }
-            createdUserIds.clear();
-            createdCourseIds.clear();
-        });
+        fixtureTracker.clean(jdbcTemplate, transactions);
+    }
+
+    /**
+     * Выполняет запрос и сразу регистрирует созданный ресурс до проверок ответа.
+     *
+     * @param request запрос MockMvc
+     * @return результат для последующих проверок
+     * @throws Exception если выполнение запроса или чтение идентификатора завершилось ошибкой
+     */
+    private org.springframework.test.web.servlet.ResultActions perform(
+            org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        return mockMvc.perform(request).andDo(result -> fixtureTracker.record(result, objectMapper));
     }
 
     /**
@@ -94,7 +99,7 @@ class EnrollmentControllerTest {
         dto.setEmail(email);
         dto.setRole(role);
 
-        MvcResult result = mockMvc.perform(post("/api/users")
+        MvcResult result = perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -104,7 +109,6 @@ class EnrollmentControllerTest {
         com.studying.platform.dto.UserResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.UserResponseDto.class);
-        createdUserIds.add(response.getId());
         return response.getId();
     }
 
@@ -118,7 +122,7 @@ class EnrollmentControllerTest {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto(name);
 
-        MvcResult result = mockMvc.perform(post("/api/categories")
+        MvcResult result = perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -147,7 +151,7 @@ class EnrollmentControllerTest {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        MvcResult result = mockMvc.perform(post("/api/courses")
+        MvcResult result = perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -157,7 +161,6 @@ class EnrollmentControllerTest {
         com.studying.platform.dto.CourseResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.CourseResponseDto.class);
-        createdCourseIds.add(response.getId());
         return response.getId();
     }
 
@@ -173,7 +176,7 @@ class EnrollmentControllerTest {
 
         EnrollmentRequestDto dto = new EnrollmentRequestDto(studentId, courseId);
 
-        MvcResult result = mockMvc.perform(post("/api/enrollments")
+        MvcResult result = perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -203,18 +206,18 @@ class EnrollmentControllerTest {
 
         // Записываем двух студентов
         EnrollmentRequestDto dto1 = new EnrollmentRequestDto(studentId1, courseId);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
 
         EnrollmentRequestDto dto2 = new EnrollmentRequestDto(studentId2, courseId);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/enrollments/courses/" + courseId + "/students"))
+        perform(get("/api/enrollments/courses/" + courseId + "/students"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].studentId").value(studentId1))
@@ -234,18 +237,18 @@ class EnrollmentControllerTest {
 
         // Записываем на оба курса
         EnrollmentRequestDto dto1 = new EnrollmentRequestDto(studentId, courseId1);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto1)))
                 .andExpect(status().isCreated());
 
         EnrollmentRequestDto dto2 = new EnrollmentRequestDto(studentId, courseId2);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto2)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/enrollments/users/" + studentId + "/courses"))
+        perform(get("/api/enrollments/users/" + studentId + "/courses"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -262,19 +265,19 @@ class EnrollmentControllerTest {
 
         // Сначала записываем
         EnrollmentRequestDto enrollDto = new EnrollmentRequestDto(studentId, courseId);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(enrollDto)))
                 .andExpect(status().isCreated());
 
         // Затем отписываем
-        mockMvc.perform(delete("/api/enrollments")
+        perform(delete("/api/enrollments")
                         .param("studentId", studentId.toString())
                         .param("courseId", courseId.toString()))
                 .andExpect(status().isNoContent());
 
         // Проверка: активная запись больше не найдена
-        mockMvc.perform(get("/api/enrollments/courses/" + courseId + "/students"))
+        perform(get("/api/enrollments/courses/" + courseId + "/students"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
@@ -290,7 +293,7 @@ class EnrollmentControllerTest {
 
         EnrollmentRequestDto dto = new EnrollmentRequestDto(teacherId, courseId);
 
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -308,13 +311,13 @@ class EnrollmentControllerTest {
 
         // Первая запись
         EnrollmentRequestDto dto = new EnrollmentRequestDto(studentId, courseId);
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
 
         // Повторная запись
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -327,7 +330,7 @@ class EnrollmentControllerTest {
     void dropEnrollment_nonExistent_shouldReturn404() throws Exception {
         Long studentId = createUser("student-drop-nx@test.io", UserRole.STUDENT);
 
-        mockMvc.perform(delete("/api/enrollments")
+        perform(delete("/api/enrollments")
                         .param("studentId", studentId.toString())
                         .param("courseId", "99999"))
                 .andExpect(status().isNotFound());
@@ -344,7 +347,7 @@ class EnrollmentControllerTest {
 
         EnrollmentRequestDto dto = new EnrollmentRequestDto(99999L, courseId);
 
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -359,7 +362,7 @@ class EnrollmentControllerTest {
 
         EnrollmentRequestDto dto = new EnrollmentRequestDto(studentId, 99999L);
 
-        mockMvc.perform(post("/api/enrollments")
+        perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -374,7 +377,7 @@ class EnrollmentControllerTest {
 
         EnrollmentRequestDto dto = new EnrollmentRequestDto(studentId, 99999L);
 
-        MvcResult result = mockMvc.perform(post("/api/enrollments")
+        MvcResult result = perform(post("/api/enrollments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound())

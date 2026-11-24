@@ -61,29 +61,29 @@ class AssignmentControllerTest {
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
-    private final java.util.List<Long> createdUserIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdCourseIds = new java.util.ArrayList<>();
+    /** Идентификаторы ресурсов, созданных текущим тестом. */
+    private final com.studying.platform.HttpFixtureTracker fixtureTracker =
+            new com.studying.platform.HttpFixtureTracker();
+
 
     /**
      * Очищает созданные тестом данные после каждого теста.
      */
     @AfterEach
     void cleanUp() {
-        transactions.executeWithoutResult(status -> {
-            jdbcTemplate.update("delete from submissions");
-            jdbcTemplate.update("delete from assignments");
-            jdbcTemplate.update("delete from lessons");
-            jdbcTemplate.update("delete from modules");
-            for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
-            }
-            jdbcTemplate.update("delete from enrollments");
-            for (int i = createdUserIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from users where id = ?", createdUserIds.get(i));
-            }
-            createdUserIds.clear();
-            createdCourseIds.clear();
-        });
+        fixtureTracker.clean(jdbcTemplate, transactions);
+    }
+
+    /**
+     * Выполняет запрос и сразу регистрирует созданный ресурс до проверок ответа.
+     *
+     * @param request запрос MockMvc
+     * @return результат для последующих проверок
+     * @throws Exception если выполнение запроса или чтение идентификатора завершилось ошибкой
+     */
+    private org.springframework.test.web.servlet.ResultActions perform(
+            org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        return mockMvc.perform(request).andDo(result -> fixtureTracker.record(result, objectMapper));
     }
 
     /**
@@ -99,7 +99,7 @@ class AssignmentControllerTest {
         dto.setEmail(email);
         dto.setRole(role);
 
-        MvcResult result = mockMvc.perform(post("/api/users")
+        MvcResult result = perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -109,7 +109,6 @@ class AssignmentControllerTest {
         com.studying.platform.dto.UserResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.UserResponseDto.class);
-        createdUserIds.add(response.getId());
         return response.getId();
     }
 
@@ -120,7 +119,7 @@ class AssignmentControllerTest {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto(name);
 
-        MvcResult result = mockMvc.perform(post("/api/categories")
+        MvcResult result = perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -145,7 +144,7 @@ class AssignmentControllerTest {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        MvcResult result = mockMvc.perform(post("/api/courses")
+        MvcResult result = perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -155,7 +154,6 @@ class AssignmentControllerTest {
         com.studying.platform.dto.CourseResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.CourseResponseDto.class);
-        createdCourseIds.add(response.getId());
         return response.getId();
     }
 
@@ -166,7 +164,7 @@ class AssignmentControllerTest {
         com.studying.platform.dto.ModuleRequestDto dto =
                 new com.studying.platform.dto.ModuleRequestDto(title, "Описание", orderIndex);
 
-        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        MvcResult result = perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -185,7 +183,7 @@ class AssignmentControllerTest {
         com.studying.platform.dto.LessonRequestDto dto =
                 new com.studying.platform.dto.LessonRequestDto(title, content, videoUrl);
 
-        MvcResult result = mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        MvcResult result = perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -215,7 +213,7 @@ class AssignmentControllerTest {
         dto.setDueDate(LocalDate.of(2026, 6, 1));
         dto.setMaxScore(100);
 
-        MvcResult result = mockMvc.perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
+        MvcResult result = perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -244,7 +242,7 @@ class AssignmentControllerTest {
 
         Long assignmentId = createAssignment(lessonId, "Читаемое задание", 50);
 
-        mockMvc.perform(get("/api/assignments/" + assignmentId))
+        perform(get("/api/assignments/" + assignmentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(assignmentId))
                 .andExpect(jsonPath("$.title").value("Читаемое задание"))
@@ -272,7 +270,7 @@ class AssignmentControllerTest {
         dto.setDueDate(LocalDate.of(2026, 7, 1));
         dto.setMaxScore(75);
 
-        mockMvc.perform(put("/api/assignments/" + assignmentId)
+        perform(put("/api/assignments/" + assignmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
@@ -295,11 +293,11 @@ class AssignmentControllerTest {
 
         Long assignmentId = createAssignment(lessonId, "Удаляемое задание", 50);
 
-        mockMvc.perform(delete("/api/assignments/" + assignmentId))
+        perform(delete("/api/assignments/" + assignmentId))
                 .andExpect(status().isNoContent());
 
         // Проверка: задание больше не найдено
-        mockMvc.perform(get("/api/assignments/" + assignmentId))
+        perform(get("/api/assignments/" + assignmentId))
                 .andExpect(status().isNotFound());
     }
 
@@ -317,7 +315,7 @@ class AssignmentControllerTest {
         createAssignment(lessonId, "Задание 1", 50);
         createAssignment(lessonId, "Задание 2", 75);
 
-        mockMvc.perform(get("/api/assignments/lessons/" + lessonId + "/assignments"))
+        perform(get("/api/assignments/lessons/" + lessonId + "/assignments"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].title").value("Задание 1"))
@@ -336,7 +334,7 @@ class AssignmentControllerTest {
         dto.setDueDate(LocalDate.of(2026, 6, 1));
         dto.setMaxScore(100);
 
-        mockMvc.perform(post("/api/assignments/lessons/99999/assignments")
+        perform(post("/api/assignments/lessons/99999/assignments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -354,7 +352,7 @@ class AssignmentControllerTest {
         dto.setDueDate(LocalDate.of(2026, 7, 1));
         dto.setMaxScore(80);
 
-        mockMvc.perform(put("/api/assignments/99999")
+        perform(put("/api/assignments/99999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -365,7 +363,7 @@ class AssignmentControllerTest {
      */
     @Test
     void deleteAssignment_nonExistent_shouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/assignments/99999"))
+        perform(delete("/api/assignments/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -387,7 +385,7 @@ class AssignmentControllerTest {
         dto.setDueDate(LocalDate.of(2026, 6, 1));
         dto.setMaxScore(100);
 
-        mockMvc.perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
+        perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -398,7 +396,7 @@ class AssignmentControllerTest {
      */
     @Test
     void getAssignmentsByLesson_nonExistent_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/assignments/lessons/99999/assignments"))
+        perform(get("/api/assignments/lessons/99999/assignments"))
                 .andExpect(status().isNotFound());
     }
 
@@ -407,7 +405,7 @@ class AssignmentControllerTest {
      */
     @Test
     void getAssignment_errorResponse_shouldHaveCorrectFormat() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/assignments/99999"))
+        MvcResult result = perform(get("/api/assignments/99999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Not Found"))
@@ -431,7 +429,7 @@ class AssignmentControllerTest {
         dto.setDueDate(LocalDate.of(2026, 6, 1));
         dto.setMaxScore(maxScore);
 
-        MvcResult result = mockMvc.perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
+        MvcResult result = perform(post("/api/assignments/lessons/" + lessonId + "/assignments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())

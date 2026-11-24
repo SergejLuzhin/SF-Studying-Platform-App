@@ -66,38 +66,29 @@ class RestApiTests {
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
-    private final java.util.List<Long> createdUserIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdCategoryIds = new java.util.ArrayList<>();
-    private final java.util.List<Long> createdCourseIds = new java.util.ArrayList<>();
+    /** Идентификаторы ресурсов, созданных текущим тестом. */
+    private final com.studying.platform.HttpFixtureTracker fixtureTracker =
+            new com.studying.platform.HttpFixtureTracker();
+
 
     /**
      * Очищает созданные тестом данные после каждого теста.
      */
     @AfterEach
     void cleanUp() {
-        transactions.executeWithoutResult(status -> {
-            // Удаляем уроки (связаны с модулями)
-            jdbcTemplate.update("delete from lessons");
-            // Удаляем модули (связаны с курсами)
-            jdbcTemplate.update("delete from modules");
-            // Удаляем записи (связаны с курсами)
-            jdbcTemplate.update("delete from enrollments");
-            // Удаляем курсы
-            for (int i = createdCourseIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from courses where id = ?", createdCourseIds.get(i));
-            }
-            // Удаляем категории (связаны с курсами)
-            for (int i = createdCategoryIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from categories where id = ?", createdCategoryIds.get(i));
-            }
-            // Удаляем пользователей
-            for (int i = createdUserIds.size() - 1; i >= 0; i--) {
-                jdbcTemplate.update("delete from users where id = ?", createdUserIds.get(i));
-            }
-            createdUserIds.clear();
-            createdCategoryIds.clear();
-            createdCourseIds.clear();
-        });
+        fixtureTracker.clean(jdbcTemplate, transactions);
+    }
+
+    /**
+     * Выполняет запрос и сразу регистрирует созданный ресурс до проверок ответа.
+     *
+     * @param request запрос MockMvc
+     * @return результат для последующих проверок
+     * @throws Exception если выполнение запроса или чтение идентификатора завершилось ошибкой
+     */
+    private org.springframework.test.web.servlet.ResultActions perform(
+            org.springframework.test.web.servlet.RequestBuilder request) throws Exception {
+        return mockMvc.perform(request).andDo(result -> fixtureTracker.record(result, objectMapper));
     }
 
     /**
@@ -112,7 +103,7 @@ class RestApiTests {
         dto.setEmail(email);
         dto.setRole(role);
 
-        MvcResult result = mockMvc.perform(post("/api/users")
+        MvcResult result = perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -121,7 +112,6 @@ class RestApiTests {
 
         UserResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(), UserResponseDto.class);
-        createdUserIds.add(response.getId());
         return response.getId();
     }
 
@@ -135,7 +125,7 @@ class RestApiTests {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto(name);
 
-        MvcResult result = mockMvc.perform(post("/api/categories")
+        MvcResult result = perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -145,7 +135,6 @@ class RestApiTests {
         com.studying.platform.dto.CategoryResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(),
                 com.studying.platform.dto.CategoryResponseDto.class);
-        createdCategoryIds.add(response.getId());
         return response.getId();
     }
 
@@ -165,7 +154,7 @@ class RestApiTests {
     void getUser_shouldReturn200() throws Exception {
         Long userId = createUser("api-user2@test.io", UserRole.TEACHER);
 
-        mockMvc.perform(get("/api/users/" + userId))
+        perform(get("/api/users/" + userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(userId))
                 .andExpect(jsonPath("$.email").value("api-user2@test.io"))
@@ -177,7 +166,7 @@ class RestApiTests {
      */
     @Test
     void getUser_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/users/99999"))
+        perform(get("/api/users/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -192,7 +181,7 @@ class RestApiTests {
     void updateUser_shouldReturn200() throws Exception {
         Long userId = createUser("api-user3@test.io", UserRole.ADMIN);
 
-        mockMvc.perform(put("/api/users/" + userId)
+        perform(put("/api/users/" + userId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk())
@@ -205,7 +194,7 @@ class RestApiTests {
      */
     @Test
     void updateUser_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(put("/api/users/99999")
+        perform(put("/api/users/99999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isNotFound());
@@ -218,7 +207,7 @@ class RestApiTests {
     void deleteUser_shouldReturn204() throws Exception {
         Long userId = createUser("api-user4@test.io", UserRole.STUDENT);
 
-        mockMvc.perform(delete("/api/users/" + userId))
+        perform(delete("/api/users/" + userId))
                 .andExpect(status().isNoContent());
     }
 
@@ -227,7 +216,7 @@ class RestApiTests {
      */
     @Test
     void deleteUser_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/users/99999"))
+        perform(delete("/api/users/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -240,7 +229,7 @@ class RestApiTests {
         dto.setEmail("not-an-email");
         dto.setRole(UserRole.STUDENT);
 
-        mockMvc.perform(post("/api/users")
+        perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -255,7 +244,7 @@ class RestApiTests {
         dto.setEmail("");
         dto.setRole(UserRole.STUDENT);
 
-        mockMvc.perform(post("/api/users")
+        perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -270,7 +259,7 @@ class RestApiTests {
         dto.setEmail("no-role@test.io");
         dto.setRole(null);
 
-        mockMvc.perform(post("/api/users")
+        perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -289,7 +278,7 @@ class RestApiTests {
         createUser("duplicate@test.io", UserRole.STUDENT);
 
         // Повторное создание с тем же email
-        mockMvc.perform(post("/api/users")
+        perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"duplicate@test.io\",\"role\":\"STUDENT\"}"))
                 .andExpect(status().isBadRequest());
@@ -302,7 +291,7 @@ class RestApiTests {
     void createCategory_shouldReturn201() throws Exception {
         Long categoryId = createCategory("Программирование");
 
-        mockMvc.perform(get("/api/categories/" + categoryId))
+        perform(get("/api/categories/" + categoryId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(categoryId))
                 .andExpect(jsonPath("$.name").value("Программирование"));
@@ -316,7 +305,7 @@ class RestApiTests {
         createCategory("Категория 1");
         createCategory("Категория 2");
 
-        mockMvc.perform(get("/api/categories"))
+        perform(get("/api/categories"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
     }
@@ -328,7 +317,7 @@ class RestApiTests {
     void getCategory_shouldReturn200() throws Exception {
         Long categoryId = createCategory("Маркетинг");
 
-        mockMvc.perform(get("/api/categories/" + categoryId))
+        perform(get("/api/categories/" + categoryId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(categoryId))
                 .andExpect(jsonPath("$.name").value("Маркетинг"));
@@ -339,7 +328,7 @@ class RestApiTests {
      */
     @Test
     void getCategory_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/categories/99999"))
+        perform(get("/api/categories/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -353,7 +342,7 @@ class RestApiTests {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto("Графический дизайн");
 
-        mockMvc.perform(put("/api/categories/" + categoryId)
+        perform(put("/api/categories/" + categoryId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
@@ -365,7 +354,7 @@ class RestApiTests {
      */
     @Test
     void updateCategory_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(put("/api/categories/99999")
+        perform(put("/api/categories/99999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Новое название\"}"))
                 .andExpect(status().isNotFound());
@@ -378,7 +367,7 @@ class RestApiTests {
     void deleteCategory_shouldReturn204() throws Exception {
         Long categoryId = createCategory("Удаляемая категория");
 
-        mockMvc.perform(delete("/api/categories/" + categoryId))
+        perform(delete("/api/categories/" + categoryId))
                 .andExpect(status().isNoContent());
     }
 
@@ -387,7 +376,7 @@ class RestApiTests {
      */
     @Test
     void deleteCategory_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/categories/99999"))
+        perform(delete("/api/categories/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -400,7 +389,7 @@ class RestApiTests {
      */
     @Test
     void errorResponseFormat_notFound_shouldHaveRequiredFields() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/users/99999"))
+        MvcResult result = perform(get("/api/users/99999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.timestamp").isNotEmpty())
                 .andExpect(jsonPath("$.status").value(404))
@@ -428,7 +417,7 @@ class RestApiTests {
      */
     @Test
     void errorResponseFormat_validationError_shouldHaveRequiredFields() throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/users")
+        MvcResult result = perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"invalid\",\"role\":null}"))
                 .andExpect(status().isBadRequest())
@@ -457,7 +446,7 @@ class RestApiTests {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto("");
 
-        mockMvc.perform(post("/api/categories")
+        perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -473,7 +462,7 @@ class RestApiTests {
         com.studying.platform.dto.CategoryCreateDto dto =
                 new com.studying.platform.dto.CategoryCreateDto("Дубликат");
 
-        mockMvc.perform(post("/api/categories")
+        perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -489,7 +478,7 @@ class RestApiTests {
         dto.setEmail(longEmail);
         dto.setRole(UserRole.STUDENT);
 
-        mockMvc.perform(post("/api/users")
+        perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -504,7 +493,7 @@ class RestApiTests {
         createUser(uniqueEmail, UserRole.STUDENT);
 
         // Читаем через API — данные должны быть доступны
-        MvcResult result = mockMvc.perform(get("/api/categories"))
+        MvcResult result = perform(get("/api/categories"))
                 .andReturn();
 
         // Проверка что контекст работает — GET категорий возвращает 200
@@ -516,7 +505,7 @@ class RestApiTests {
      */
     @Test
     void createUser_emptyBody_shouldReturn400() throws Exception {
-        mockMvc.perform(post("/api/users")
+        perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
@@ -527,7 +516,7 @@ class RestApiTests {
      */
     @Test
     void createCategory_emptyBody_shouldReturn400() throws Exception {
-        mockMvc.perform(post("/api/categories")
+        perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
@@ -554,7 +543,7 @@ class RestApiTests {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        MvcResult result = mockMvc.perform(post("/api/courses")
+        MvcResult result = perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -563,7 +552,6 @@ class RestApiTests {
 
         CourseResponseDto response = objectMapper.readValue(
                 result.getResponse().getContentAsString(), CourseResponseDto.class);
-        createdCourseIds.add(response.getId());
         return response.getId();
     }
 
@@ -578,7 +566,7 @@ class RestApiTests {
 
         assertNotNull(courseId, "ID созданного курса не должен быть null");
 
-        mockMvc.perform(get("/api/courses/" + courseId))
+        perform(get("/api/courses/" + courseId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(courseId))
                 .andExpect(jsonPath("$.title").isNotEmpty())
@@ -595,7 +583,7 @@ class RestApiTests {
         Long categoryId = createCategory("Категория для чтения");
         Long courseId = createCourse(teacherId, categoryId);
 
-        mockMvc.perform(get("/api/courses/" + courseId))
+        perform(get("/api/courses/" + courseId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(courseId))
                 .andExpect(jsonPath("$.teacherId").value(teacherId))
@@ -621,7 +609,7 @@ class RestApiTests {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        mockMvc.perform(put("/api/courses/" + courseId)
+        perform(put("/api/courses/" + courseId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
@@ -639,7 +627,7 @@ class RestApiTests {
         Long categoryId = createCategory("Категория для удаления");
         Long courseId = createCourse(teacherId, categoryId);
 
-        mockMvc.perform(delete("/api/courses/" + courseId))
+        perform(delete("/api/courses/" + courseId))
                 .andExpect(status().isNoContent());
     }
 
@@ -657,7 +645,7 @@ class RestApiTests {
         dto.setDescription("Описание модуля");
         dto.setOrderIndex(1);
 
-        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        MvcResult result = perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -682,7 +670,7 @@ class RestApiTests {
 
         // Добавляем модуль
         ModuleRequestDto moduleDto = new ModuleRequestDto("Модуль структуры", "Описание", 1);
-        mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(moduleDto)))
                 .andExpect(status().isCreated());
@@ -691,12 +679,12 @@ class RestApiTests {
         LessonRequestDto lessonDto = new LessonRequestDto("Урок 1", "Содержание урока", "http://example.com/video");
         Long moduleId = getModuleIdByCourse(courseId);
 
-        mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(lessonDto)))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/courses/" + courseId + "/structure"))
+        perform(get("/api/courses/" + courseId + "/structure"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(courseId))
                 .andExpect(jsonPath("$.modules.length()").value(1))
@@ -716,7 +704,7 @@ class RestApiTests {
         addModuleToCourse(courseId, "Модуль для чтения", 1);
         Long moduleId = getModuleIdByCourse(courseId);
 
-        mockMvc.perform(get("/api/modules/" + moduleId))
+        perform(get("/api/modules/" + moduleId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(moduleId))
                 .andExpect(jsonPath("$.title").value("Модуль для чтения"))
@@ -739,7 +727,7 @@ class RestApiTests {
         dto.setDescription("Новое описание модуля");
         dto.setOrderIndex(2);
 
-        mockMvc.perform(put("/api/modules/" + moduleId)
+        perform(put("/api/modules/" + moduleId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
@@ -758,7 +746,7 @@ class RestApiTests {
         addModuleToCourse(courseId, "Удаляемый модуль", 1);
         Long moduleId = getModuleIdByCourse(courseId);
 
-        mockMvc.perform(delete("/api/modules/" + moduleId))
+        perform(delete("/api/modules/" + moduleId))
                 .andExpect(status().isNoContent());
     }
 
@@ -778,7 +766,7 @@ class RestApiTests {
         dto.setContent("Содержание урока");
         dto.setVideoUrl("http://example.com/video.mp4");
 
-        MvcResult result = mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        MvcResult result = perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -803,7 +791,7 @@ class RestApiTests {
         Long moduleId = addModuleToCourseAndReturnId(courseId, "Модуль", 1);
         Long lessonId = addLessonToModuleAndReturnId(moduleId, "Урок для чтения", "Содержание", "http://example.com/v");
 
-        mockMvc.perform(get("/api/lessons/" + lessonId))
+        perform(get("/api/lessons/" + lessonId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(lessonId))
                 .andExpect(jsonPath("$.title").value("Урок для чтения"))
@@ -827,7 +815,7 @@ class RestApiTests {
         dto.setContent("Обновлённое содержание");
         dto.setVideoUrl("http://example.com/new-video");
 
-        mockMvc.perform(put("/api/lessons/" + lessonId)
+        perform(put("/api/lessons/" + lessonId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
@@ -846,7 +834,7 @@ class RestApiTests {
         Long moduleId = addModuleToCourseAndReturnId(courseId, "Модуль", 1);
         Long lessonId = addLessonToModuleAndReturnId(moduleId, "Удаляемый урок", "Содержание", null);
 
-        mockMvc.perform(delete("/api/lessons/" + lessonId))
+        perform(delete("/api/lessons/" + lessonId))
                 .andExpect(status().isNoContent());
     }
 
@@ -863,7 +851,7 @@ class RestApiTests {
 
         // Добавляем модуль
         ModuleRequestDto moduleDto = new ModuleRequestDto("Модуль цикла", "Описание", 1);
-        mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(moduleDto)))
                 .andExpect(status().isCreated());
@@ -872,13 +860,13 @@ class RestApiTests {
 
         // Добавляем урок
         LessonRequestDto lessonDto = new LessonRequestDto("Урок цикла", "Полный контент", "http://example.com");
-        mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(lessonDto)))
                 .andExpect(status().isCreated());
 
         // Получаем структуру
-        mockMvc.perform(get("/api/courses/" + courseId + "/structure"))
+        perform(get("/api/courses/" + courseId + "/structure"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.modules[0].lessons[0].title").value("Урок цикла"))
                 .andExpect(jsonPath("$.modules[0].lessons[0].content").value("Полный контент"));
@@ -891,7 +879,7 @@ class RestApiTests {
      */
     @Test
     void getCourse_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/courses/99999"))
+        perform(get("/api/courses/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -908,7 +896,7 @@ class RestApiTests {
         dto.setTeacherId(1L);
         dto.setCategoryId(1L);
 
-        mockMvc.perform(put("/api/courses/99999")
+        perform(put("/api/courses/99999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -919,7 +907,7 @@ class RestApiTests {
      */
     @Test
     void deleteCourse_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/courses/99999"))
+        perform(delete("/api/courses/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -939,7 +927,7 @@ class RestApiTests {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        mockMvc.perform(post("/api/courses")
+        perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -960,7 +948,7 @@ class RestApiTests {
         dto.setTeacherId(null);
         dto.setCategoryId(categoryId);
 
-        mockMvc.perform(post("/api/courses")
+        perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -982,7 +970,7 @@ class RestApiTests {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(categoryId);
 
-        mockMvc.perform(post("/api/courses")
+        perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -1003,7 +991,7 @@ class RestApiTests {
         dto.setTeacherId(99999L);
         dto.setCategoryId(categoryId);
 
-        mockMvc.perform(post("/api/courses")
+        perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1024,7 +1012,7 @@ class RestApiTests {
         dto.setTeacherId(teacherId);
         dto.setCategoryId(99999L);
 
-        mockMvc.perform(post("/api/courses")
+        perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1042,11 +1030,13 @@ class RestApiTests {
 
         // Записываем студента на курс
         transactions.executeWithoutResult(status -> {
-            jdbcTemplate.update("insert into enrollments (user_id, course_id, enroll_date, status) values (?, ?, ?, ?)",
-                    studentId, courseId, LocalDate.now(), "ACTIVE");
+            Long id = jdbcTemplate.queryForObject(
+                    "insert into enrollments (user_id, course_id, enroll_date, status) values (?, ?, ?, ?) returning id",
+                    Long.class, studentId, courseId, LocalDate.now(), "ACTIVE");
+            fixtureTracker.track("enrollments", id);
         });
 
-        mockMvc.perform(delete("/api/courses/" + courseId))
+        perform(delete("/api/courses/" + courseId))
                 .andExpect(status().isBadRequest());
     }
 
@@ -1057,7 +1047,7 @@ class RestApiTests {
     void addModule_nonExistentCourse_shouldReturn404() throws Exception {
         ModuleRequestDto dto = new ModuleRequestDto("Модуль", "Описание", 1);
 
-        mockMvc.perform(post("/api/courses/99999/modules")
+        perform(post("/api/courses/99999/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -1068,7 +1058,7 @@ class RestApiTests {
      */
     @Test
     void getModule_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/modules/99999"))
+        perform(get("/api/modules/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -1077,7 +1067,7 @@ class RestApiTests {
      */
     @Test
     void getLesson_notFound_shouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/lessons/99999"))
+        perform(get("/api/lessons/99999"))
                 .andExpect(status().isNotFound());
     }
 
@@ -1086,7 +1076,7 @@ class RestApiTests {
      */
     @Test
     void createCourse_emptyBody_shouldReturn400() throws Exception {
-        mockMvc.perform(post("/api/courses")
+        perform(post("/api/courses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
@@ -1106,7 +1096,7 @@ class RestApiTests {
         dto.setDescription("Описание");
         dto.setOrderIndex(1);
 
-        mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -1127,7 +1117,7 @@ class RestApiTests {
         dto.setContent("Содержание");
         dto.setVideoUrl(null);
 
-        mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
@@ -1138,7 +1128,7 @@ class RestApiTests {
      */
     @Test
     void errorResponseFormat_course_shouldHaveRequiredFields() throws Exception {
-        MvcResult result = mockMvc.perform(get("/api/courses/99999"))
+        MvcResult result = perform(get("/api/courses/99999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.timestamp").isNotEmpty())
                 .andExpect(jsonPath("$.status").value(404))
@@ -1164,7 +1154,7 @@ class RestApiTests {
      */
     private Long addModuleToCourse(Long courseId, String title, int orderIndex) throws Exception {
         ModuleRequestDto dto = new ModuleRequestDto(title, "Описание", orderIndex);
-        MvcResult result = mockMvc.perform(post("/api/courses/" + courseId + "/modules")
+        MvcResult result = perform(post("/api/courses/" + courseId + "/modules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -1188,7 +1178,7 @@ class RestApiTests {
      */
     private Long addLessonToModuleAndReturnId(Long moduleId, String title, String content, String videoUrl) throws Exception {
         LessonRequestDto dto = new LessonRequestDto(title, content, videoUrl);
-        MvcResult result = mockMvc.perform(post("/api/lessons/modules/" + moduleId + "/lessons")
+        MvcResult result = perform(post("/api/lessons/modules/" + moduleId + "/lessons")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
