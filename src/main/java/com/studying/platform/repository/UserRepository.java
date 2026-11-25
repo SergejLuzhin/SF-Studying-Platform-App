@@ -1,0 +1,40 @@
+package com.studying.platform.repository;
+
+import com.studying.platform.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+/**
+ * Репозиторий для сущности «Пользователь».
+ * <p>
+ * Обеспечивает базовые CRUD-операции для пользователей учебной платформы,
+ * а также поиск по уникальному адресу электронной почты и проверку существования.
+ * </p>
+ */
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    /**
+     * Находит пользователя по уникальному адресу электронной почты.
+     *
+     * @param email адрес электронной почты
+     * @return обязательное значение с пользователем, если найден; пустое значение — если нет
+     */
+    Optional<User> findByEmail(String email);
+
+    /**
+     * Проверяет существование пользователя по идентификатору.
+     *
+     * @param id идентификатор пользователя
+     * @return true, если пользователь с заданным идентификатором существует
+     */
+    boolean existsById(Long id);
+
+    /**
+     * Проверяет существование пользователя по адресу электронной почты.
+     *
+     * @param email адрес электронной почты
+     * @return true, если пользователь с заданным адресом электронной почты существует
+     */
+    boolean existsByEmail(String email);
+}

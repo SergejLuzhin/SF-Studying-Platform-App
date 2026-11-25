@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Жёсткие запреты на обычные записи в Git.
+  // Эти правила не заменяют песочницу и не гарантируют блокировку обходных путей через shell.
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git add *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git commit *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git tag *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git reset *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git clean *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git -C * add *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git -C * commit *", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git -C * push *", "effect": "deny" }
+  ]
+}

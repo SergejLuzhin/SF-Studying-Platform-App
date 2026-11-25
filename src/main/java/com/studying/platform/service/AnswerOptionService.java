@@ -1,0 +1,176 @@
+package com.studying.platform.service;
+
+import com.studying.platform.entity.AnswerOption;
+import com.studying.platform.entity.Question;
+import com.studying.platform.exception.ResourceNotFoundException;
+import com.studying.platform.repository.AnswerOptionRepository;
+import com.studying.platform.repository.QuestionRepository;
+import com.studying.platform.repository.QuizSubmissionRepository;
+
+import jakarta.persistence.EntityManager;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Сервис для управления вариантами ответов викторины учебной платформы.
+ * <p>
+ * Обеспечивает CRUD-операции для сущности AnswerOption.
+ * Проверяет существование связанного вопроса и сохраняет изменения
+ * через EntityManager.
+ * </p>
+ *
+ * @see AnswerOption
+ * @see Question
+ */
+@Service
+@Transactional
+public class AnswerOptionService {
+
+    /**
+     * Репозиторий для работы с вариантами ответов.
+     */
+    private final AnswerOptionRepository answerOptionRepository;
+
+    /**
+     * Репозиторий для работы с вопросами.
+     */
+    private final QuestionRepository questionRepository;
+
+    /**
+     * Менеджер сущностей для управления транзакциями и сброса контекста.
+     */
+    private final EntityManager entityManager;
+
+    /** Репозиторий результатов для защиты истории прохождения. */
+    private final QuizSubmissionRepository quizSubmissionRepository;
+
+    /**
+     * Конструктор сервиса с внедрением зависимостей через конструктор.
+     *
+     * @param answerOptionRepository  репозиторий вариантов ответов
+     * @param questionRepository      репозиторий вопросов
+     * @param entityManager           менеджер сущностей JPA
+     * @param quizSubmissionRepository репозиторий результатов тестов
+     */
+    public AnswerOptionService(AnswerOptionRepository answerOptionRepository,
+                               QuestionRepository questionRepository,
+                                EntityManager entityManager,
+                                QuizSubmissionRepository quizSubmissionRepository) {
+        this.answerOptionRepository = answerOptionRepository;
+        this.questionRepository = questionRepository;
+        this.entityManager = entityManager;
+        this.quizSubmissionRepository = quizSubmissionRepository;
+    }
+
+    /**
+     * Создаёт вариант ответа для указанного вопроса.
+     * <p>
+     * Проверяет существование вопроса, поддерживает двунаправленную связь
+     * между вопросом и вариантом ответа, сохраняет новый вариант.
+     * </p>
+     *
+     * @param questionId идентификатор вопроса
+     * @param text       текст варианта ответа
+     * @param isCorrect  признак правильности варианта
+     * @return сохранённый вариант ответа
+     * @throws ResourceNotFoundException если вопрос не найден
+     */
+    public AnswerOption createAnswerOption(Long questionId, String text, Boolean isCorrect) {
+        Question question = questionRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Вопрос с идентификатором " + questionId + " не найден"));
+
+        AnswerOption option = new AnswerOption(question, text, isCorrect);
+        // Поддержка двунаправленной связи: добавляем вариант в коллекцию вопроса
+        question.getOptions().add(option);
+        option.setQuestion(question);
+        entityManager.persist(option);
+        entityManager.flush();
+        return option;
+    }
+
+    /**
+     * Возвращает вариант ответа по идентификатору.
+     * <p>
+     * Если вариант не найден — выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param answerOptionId идентификатор варианта ответа
+     * @return найденный вариант ответа
+     * @throws ResourceNotFoundException если вариант не найден
+     */
+    @Transactional(readOnly = true)
+    public AnswerOption findAnswerOption(Long answerOptionId) {
+        return answerOptionRepository.findById(answerOptionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Вариант ответа с идентификатором " + answerOptionId + " не найден"));
+    }
+
+    /**
+     * Возвращает список всех вариантов ответа указанного вопроса.
+     * <p>
+     * Проверяет существование вопроса. Если вопрос не найден —
+     * выбрасывает {@link ResourceNotFoundException}.
+     * </p>
+     *
+     * @param questionId идентификатор вопроса
+     * @return список вариантов ответа
+     * @throws ResourceNotFoundException если вопрос не найден
+     */
+    @Transactional(readOnly = true)
+    public List<AnswerOption> getOptionsByQuestion(Long questionId) {
+        if (!questionRepository.existsById(questionId)) {
+            throw new ResourceNotFoundException(
+                    "Вопрос с идентификатором " + questionId + " не найден");
+        }
+        return answerOptionRepository.findByQuestionId(questionId);
+    }
+
+    /**
+     * Обновляет текст и признак правильности существующего варианта ответа.
+     * <p>
+     * Проверяет существование варианта и обновляет переданные поля.
+     * </p>
+     *
+     * @param answerOptionId идентификатор варианта ответа
+     * @param text           новый текст варианта
+     * @param isCorrect      новый признак правильности
+     * @return обновлённый вариант ответа
+     * @throws ResourceNotFoundException если вариант не найден
+     */
+    public AnswerOption updateAnswerOption(Long answerOptionId, String text, Boolean isCorrect) {
+        AnswerOption option = findAnswerOption(answerOptionId);
+        if (text != null) {
+            option.setText(text);
+        }
+        if (isCorrect != null) {
+            option.setIsCorrect(isCorrect);
+        }
+        entityManager.merge(option);
+        entityManager.flush();
+        return option;
+    }
+
+    /**
+     * Удаляет вариант ответа по идентификатору.
+     * <p>
+     * Удаляет только указанный вариант при отсутствии результатов родительского теста.
+     * </p>
+     *
+     * @param answerOptionId идентификатор варианта для удаления
+     * @throws ResourceNotFoundException если вариант не найден
+     * @throws IllegalStateException если у теста есть сохранённые результаты
+     */
+    public void deleteAnswerOption(Long answerOptionId) {
+        AnswerOption option = findAnswerOption(answerOptionId);
+        if (quizSubmissionRepository.countByQuizIdIn(List.of(option.getQuestion().getQuiz().getId())) > 0) {
+            throw new IllegalStateException("Нельзя удалить вариант ответа теста с сохранёнными результатами");
+        }
+        option.getQuestion().getOptions().remove(option);
+        entityManager.remove(option);
+        entityManager.flush();
+    }
+}
