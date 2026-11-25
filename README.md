@@ -48,6 +48,7 @@
   - [11.6. Роли и доступ](#116-роли-и-доступ)
   - [11.7. Каскады и ленивая загрузка](#117-каскады-и-ленивая-загрузка)
 - [12. Переменные окружения](#12-переменные-окружения)
+- [13. Подробная инструкция по ручной проверке](#13-подробная-инструкция-по-ручной-проверке)
 
 ---
 
@@ -474,7 +475,7 @@ erDiagram
    Ключи — строковые ID вопросов, значения — массивы ID выбранных вариантов.
 3. Результат сохраняется в `QuizSubmission` с полем `score` (0–100) и возвращается в ответе.
 
-**Валидация тестов:** неготовый тест (без вопросов или без правильных вариантов) возвращает 400 при попытке `/start`. Вопрос типа `SINGLE_CHOICE` должен иметь ровно один правильный вариант, `MULTIPLE_CHOICE` — хотя бы один. Чужие ID в ответах (несуществующие вопросы и варианты) игнорируются.
+**Валидация тестов:** `/start` возвращает 400 для теста без вопросов. При сдаче дополнительно проверяются варианты: вопрос типа `SINGLE_CHOICE` должен иметь ровно один правильный вариант, `MULTIPLE_CHOICE` — хотя бы один. Посторонние ID вопросов игнорируются; лишние ID вариантов в ответе не позволяют получить балл за вопрос.
 
 ### 6.7. Отзывы и теги
 
@@ -491,7 +492,7 @@ erDiagram
 
 Тело отзыва: `{"studentId": 2, "courseId": 1, "rating": 5, "comment": "Отличный курс"}`. Только записанные студенты могут оставлять отзывы. Рейтинг ограничивается диапазоном 1–5. Один отзыв от одного студента на один курс (уникальность на уровне БД).
 
-Тело тегов для курса: `POST /api/courses/{courseId}/tags` с массивом `["1", "2"]` — ID тегов.
+Тело тегов для курса: `POST /api/courses/{courseId}/tags` с массивом `[1, 2]` — ID тегов.
 
 ### 6.8. Форматы ответов и ошибок
 
@@ -729,17 +730,17 @@ mvn -B verify
 
 - На каждое задание студент может отправить **не более одного решения**. Повторная попытка возвращает HTTP 400.
 - Отправить решение может **только записанный студент** (статус записи `ACTIVE`). Незаписанный студент получит HTTP 400.
-- Оценка решения (`score`) должна быть в диапазоне **0–100**. Попытка установить значение за пределами диапазона возвращает HTTP 400.
+- Оценка решения (`score`) не может быть отрицательной или превышать `maxScore` задания, если тот задан. Нарушение возвращает HTTP 400.
 - Комментарий преподавателя (`feedback`) к решению — опциональный текстовый поле.
 - Решения защищены уникальным составным ограничением на уровне базы данных: `(assignment_id, student_id)`.
 
 ### 11.4. Тесты и викторины
 
 - У каждого модуля **не более одного теста** (связь 1:1 через `@OneToOne`).
-- Перед прохождением тест должен содержать **хотя бы один вопрос**, и у каждого вопроса — **хотя бы один вариант ответа**. Неготовый тест возвращает HTTP 400 при `/start`.
+- Для `/start` тест должен содержать **хотя бы один вопрос**. При сдаче дополнительно проверяется наличие вариантов ответа у каждого вопроса.
 - Для типа `SINGLE_CHOICE` должен быть **ровно один** правильный вариант. Для `MULTIPLE_CHOICE` — **хотя бы один** правильный вариант. Неправильная конфигурация не позволяет пройти тест.
 - Тест можно проходить **многократно** — каждый проход сохраняется как отдельная запись `QuizSubmission`.
-- При прохождении теста **игнорируются** ответы на вопросы, которых нет в тесте, и **не засчитываются** варианты, которых нет в вопросе. Результат вычисляется только по корректным ответам.
+- При прохождении теста ответы на вопросы, которых нет в тесте, **игнорируются**. Набор выбранных вариантов должен в точности совпадать с правильным: лишний вариант делает ответ неправильным.
 - Результат теста вычисляется автоматически: правильный ответ (или набор правильных ответов для `MULTIPLE_CHOICE`) даёт 100% баллов за вопрос. Итоговый балл — процент правильных ответов.
 
 ### 11.5. Отзывы и теги
@@ -780,5 +781,215 @@ mvn -B verify
 | `DB_URL` | `jdbc:postgresql://localhost:5432/studying_platform_v2` | URL подключения к PostgreSQL. |
 | `DB_USER` | `postgres` | Имя пользователя PostgreSQL. |
 | `DB_PASSWORD` | `postgres` | Пароль PostgreSQL. |
+
+---
+
+## 13. Подробная инструкция по ручной проверке
+
+Приложение предоставляет **REST API**, а не графический интерфейс: страницы для регистрации, входа или прохождения курса в браузере здесь нет. Запросы ниже можно выполнять в терминале через `curl` либо перенести их в Postman или HTTP-клиент IntelliJ IDEA. Аутентификация не реализована; роли и ID пользователей передаются непосредственно в запросах.
+
+### 13.1. Подготовка
+
+1. Установите **JDK 23**, Maven 3, Docker с запущенным Docker Engine и `curl`. Проверьте `java -version`, `mvn -version` и `docker version`. Примеры рассчитаны на Bash или zsh в macOS/Linux; `jq` не требуется.
+2. Из корня проекта запустите отдельную PostgreSQL и приложение по [разделу 7](#7-локальный-запуск). Используйте профиль `dev`, без `demo`, и дождитесь в первом терминале сообщения `Started StudyingPlatformApplication`.
+3. Откройте **второй терминал**. Команды ниже выполняйте в нём последовательно: переменные действуют только в текущем терминале.
+
+```bash
+BASE=http://localhost:8080
+curl -i "$BASE/api/categories"
+```
+
+Ожидается `HTTP 200` и JSON-массив категорий (в новой базе — `[]`). Опция `-i` показывает HTTP-статус и заголовки; JSON находится после пустой строки. При создании обычно возвращается `201`, при чтении и обновлении — `200`, при удалении — `204` без тела.
+
+**Важно:** после каждого создания найдите `id` в JSON-ответе и вручную присвойте его указанной переменной, заменив `ЧИСЛО` на фактическое число. ID нельзя считать равными 1: они зависят от состояния базы. При повторном выполнении используйте новые email и название тега, поскольку они уникальны. Не запускайте сценарий на рабочей базе: он создаёт и изменяет данные.
+
+### 13.2. Создание пользователей и курса
+
+Создайте преподавателя и студента. После каждого запроса сохраните соответствующий `id`:
+
+```bash
+curl -i -X POST "$BASE/api/users" -H 'Content-Type: application/json' \
+  -d '{"email":"manual-teacher@example.com","role":"TEACHER"}'
+TEACHER_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/users" -H 'Content-Type: application/json' \
+  -d '{"email":"manual-student@example.com","role":"STUDENT"}'
+STUDENT_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/categories" -H 'Content-Type: application/json' \
+  -d '{"name":"Ручная проверка"}'
+CATEGORY_ID=ЧИСЛО
+```
+
+Создайте курс с полученными ID и сохраните его ID:
+
+```bash
+curl -i -X POST "$BASE/api/courses" -H 'Content-Type: application/json' \
+  -d "{\"title\":\"Основы Java\",\"description\":\"Пробный курс\",\"duration\":40,\"startDate\":\"2030-09-01\",\"teacherId\":$TEACHER_ID,\"categoryId\":$CATEGORY_ID}"
+COURSE_ID=ЧИСЛО
+
+curl -i "$BASE/api/courses/$COURSE_ID"
+curl -i "$BASE/api/categories"
+```
+
+Проверьте название, категорию и ID преподавателя в ответе. Для изменения курса используйте `PUT` с полным набором обязательных полей:
+
+```bash
+curl -i -X PUT "$BASE/api/courses/$COURSE_ID" -H 'Content-Type: application/json' \
+  -d "{\"title\":\"Основы Java: обновлено\",\"description\":\"Пробный курс\",\"duration\":40,\"startDate\":\"2030-09-01\",\"teacherId\":$TEACHER_ID,\"categoryId\":$CATEGORY_ID}"
+```
+
+Ожидается `200` и обновлённое название; убедиться в сохранении можно повторным `GET` курса.
+
+### 13.3. Наполнение курса
+
+Добавьте модуль, урок и задание, сохраняя ID из каждого ответа:
+
+```bash
+curl -i -X POST "$BASE/api/courses/$COURSE_ID/modules" -H 'Content-Type: application/json' \
+  -d '{"title":"Первый модуль","description":"Знакомство","orderIndex":1}'
+MODULE_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/lessons/modules/$MODULE_ID/lessons" -H 'Content-Type: application/json' \
+  -d '{"title":"Первый урок","content":"Прочитайте материал урока","videoUrl":null}'
+LESSON_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/assignments/lessons/$LESSON_ID/assignments" -H 'Content-Type: application/json' \
+  -d '{"title":"Практика","description":"Напишите приветствие","dueDate":"2030-12-01","maxScore":100}'
+ASSIGNMENT_ID=ЧИСЛО
+
+curl -i "$BASE/api/courses/$COURSE_ID/structure"
+curl -i "$BASE/api/assignments/lessons/$LESSON_ID/assignments"
+```
+
+В структуре должны быть модуль и урок; задания получаются отдельным последним запросом.
+
+### 13.4. Запись, решение и оценка
+
+Запишите студента и проверьте обе стороны связи:
+
+```bash
+curl -i -X POST "$BASE/api/enrollments" -H 'Content-Type: application/json' \
+  -d "{\"studentId\":$STUDENT_ID,\"courseId\":$COURSE_ID}"
+curl -i "$BASE/api/enrollments/courses/$COURSE_ID/students"
+curl -i "$BASE/api/enrollments/users/$STUDENT_ID/courses"
+```
+
+Ожидается `201` при записи и `200` со студентом/курсом в соответствующих списках. Повторите первый запрос: повторная активная запись должна вернуть `400`.
+
+Отправьте решение, сохраните его ID и оцените от имени преподавателя:
+
+```bash
+curl -i -X POST "$BASE/api/submissions" -H 'Content-Type: application/json' \
+  -d "{\"assignmentId\":$ASSIGNMENT_ID,\"studentId\":$STUDENT_ID,\"content\":\"Hello, world!\"}"
+SUBMISSION_ID=ЧИСЛО
+
+curl -i -X PATCH "$BASE/api/submissions/$SUBMISSION_ID?teacherId=$TEACHER_ID" \
+  -H 'Content-Type: application/json' -d '{"score":90,"feedback":"Хорошая работа"}'
+curl -i "$BASE/api/submissions/assignments/$ASSIGNMENT_ID/submissions"
+curl -i "$BASE/api/submissions/users/$STUDENT_ID/submissions"
+```
+
+В списках найдите решение с оценкой `90` и комментарием. Повторная отправка решения на то же задание возвращает `400`. Попробуйте оценку `101`: для задания с `maxScore: 100` ожидается `400`.
+
+### 13.5. Создание и прохождение теста
+
+Создайте тест и один вопрос с единственным правильным ответом. Сохраняйте ID из ответов:
+
+```bash
+curl -i -X POST "$BASE/api/quiz" -H 'Content-Type: application/json' \
+  -d "{\"moduleId\":$MODULE_ID,\"title\":\"Проверка знаний\",\"timeLimit\":10}"
+QUIZ_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/quiz/$QUIZ_ID/questions" -H 'Content-Type: application/json' \
+  -d '{"text":"Сколько будет 2 + 2?","type":"SINGLE_CHOICE"}'
+QUESTION_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/question/$QUESTION_ID/options" -H 'Content-Type: application/json' \
+  -d '{"text":"4","isCorrect":true}'
+CORRECT_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/question/$QUESTION_ID/options" -H 'Content-Type: application/json' \
+  -d '{"text":"5","isCorrect":false}'
+WRONG_ID=ЧИСЛО
+```
+
+Посмотрите тест глазами студента и отправьте правильный ответ:
+
+```bash
+curl -i "$BASE/api/quiz/$QUIZ_ID/start"
+curl -i -X POST "$BASE/api/quiz/$QUIZ_ID/submit" -H 'Content-Type: application/json' \
+  -d "{\"studentId\":$STUDENT_ID,\"answers\":{\"$QUESTION_ID\":[$CORRECT_ID]}}"
+```
+
+В ответе `/start` есть вопрос и варианты без признака правильности. При сдаче ожидается `201` и `score: 100`. Проверьте неправильный ответ и историю:
+
+```bash
+curl -i -X POST "$BASE/api/quiz/$QUIZ_ID/submit" -H 'Content-Type: application/json' \
+  -d "{\"studentId\":$STUDENT_ID,\"answers\":{\"$QUESTION_ID\":[$WRONG_ID]}}"
+curl -i "$BASE/api/submissions/quiz/student/$STUDENT_ID"
+curl -i "$BASE/api/submissions/quiz/quiz/$QUIZ_ID"
+```
+
+Вторая попытка должна иметь `score: 0`; обе попытки сохраняются. Для `MULTIPLE_CHOICE` в массиве ответа нужно указать **все** правильные ID и не указывать неправильные.
+
+### 13.6. Отзывы и теги
+
+Оставьте отзыв и проверьте список:
+
+```bash
+curl -i -X POST "$BASE/api/course-reviews" -H 'Content-Type: application/json' \
+  -d "{\"studentId\":$STUDENT_ID,\"courseId\":$COURSE_ID,\"rating\":5,\"comment\":\"Понятный курс\"}"
+curl -i "$BASE/api/course-reviews/course/$COURSE_ID"
+```
+
+Ожидается `201` и затем отзыв в списке. Рейтинг вне диапазона 1–5 должен вернуть `400`.
+
+Создайте тег, привяжите и отвяжите его:
+
+```bash
+curl -i -X POST "$BASE/api/tags" -H 'Content-Type: application/json' \
+  -d '{"name":"manual-java"}'
+TAG_ID=ЧИСЛО
+
+curl -i -X POST "$BASE/api/courses/$COURSE_ID/tags" -H 'Content-Type: application/json' \
+  -d "[$TAG_ID]"
+curl -i "$BASE/api/tags"
+curl -i -X DELETE "$BASE/api/courses/$COURSE_ID/tags" -H 'Content-Type: application/json' \
+  -d "[$TAG_ID]"
+```
+
+Привязка и отвязка возвращают `204`; тег остаётся в общем списке после отвязки.
+
+### 13.7. Отписка и отрицательные проверки
+
+```bash
+# Несуществующий пользователь: 404
+curl -i "$BASE/api/users/999999999"
+
+# Пустое название категории: 400
+curl -i -X POST "$BASE/api/categories" -H 'Content-Type: application/json' -d '{"name":""}'
+
+# Отписка: 204
+curl -i -X DELETE "$BASE/api/enrollments?studentId=$STUDENT_ID&courseId=$COURSE_ID"
+
+# После отписки прохождение недоступно: 404, активная запись не найдена
+curl -i -X POST "$BASE/api/quiz/$QUIZ_ID/submit" -H 'Content-Type: application/json' \
+  -d "{\"studentId\":$STUDENT_ID,\"answers\":{\"$QUESTION_ID\":[$CORRECT_ID]}}"
+
+# История попыток сохраняется
+curl -i "$BASE/api/submissions/quiz/student/$STUDENT_ID"
+```
+
+Также попытка удалить курс с учебной историей через `DELETE /api/courses/$COURSE_ID` должна вернуть `400`. Тело ошибки содержит описание причины; при `204` тела нет.
+
+### 13.8. Завершение и устранение проблем
+
+- Остановите приложение через `Ctrl+C` в первом терминале. Если база запущена командой из раздела 7, её можно остановить через `docker stop studying-demo-db`. Для повторного использования — `docker start studying-demo-db`.
+- Тестовые данные сохраняются в контейнере базы. **Только если они больше не нужны**, после остановки удалите именно этот контейнер командой `docker rm studying-demo-db`; вместе с ним удалится его база. Для нового чистого запуска повторите создание из раздела 7.
+- `Connection refused`: проверьте, что приложение запущено и слушает `8080`, а запрос отправлен во втором терминале.
+- Ошибка подключения к БД при старте: проверьте `docker ps`, порт `55432` и переменные `DB_URL`, `DB_USER`, `DB_PASSWORD` в терминале приложения.
+- `400` или `404` на шаге сценария: проверьте HTTP-статус предыдущего создания, фактические ID и JSON. Для повторного сценария используйте новые уникальные email и тег.
+- Если порты заняты, остановите конфликтующий сервис либо измените привязку порта и соответствующий URL. Полный список маршрутов приведён в [разделе 6](#6-rest-api).
 
 Эти переменные читаются конфигурационными файлами профилей. При запуске в Docker Compose профиль `docker` использует фиксированные значения из `application-docker.yml`, игнорируя переменные `DB_*`.
