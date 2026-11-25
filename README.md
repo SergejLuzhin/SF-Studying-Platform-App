@@ -146,7 +146,7 @@ HTTP-запрос
 
 | Сущность | Таблица БД | Назначение |
 |---|---|---|
-| **User** | `users` | Участник системы (студент, преподаватель, администратор). Уникальный `email`. |
+| **User** | `users` | Участник системы (студент, преподаватель, администратор). Уникальный `login`. |
 | **Profile** | `profiles` | Дополнительная информация пользователя (биография, аватар). Связь 1:1 с `User`. |
 | **Category** | `categories` | Классификация курсов (например, «Программирование»). |
 | **Course** | `courses` | Учебный курс с названием, описанием, продолжительностью и датой начала. Привязан к категории и преподавателю. |
@@ -156,13 +156,13 @@ HTTP-запрос
 | **Assignment** | `assignments` | Задание урока: описание, дедлайн, максимальный балл. Привязано к уроку. |
 | **Submission** | `submissions` | Решение студента: текст, время отправки, оценка и комментарий преподавателя. Уникальность по паре `(assignment_id, student_id)`. |
 | **Quiz** | `quiz` | Викторина модуля (один модуль — не более одного теста). |
-| **Question** | `questions` | Вопрос теста с текстом и типом (`SINGLE_CHOICE` / `MULTIPLE_CHOICE`). |
-| **AnswerOption** | `answeroptions` | Вариант ответа на вопрос (текст + флаг правильности). |
+| **Question** | `question` | Вопрос теста с текстом и типом (`SINGLE_CHOICE` / `MULTIPLE_CHOICE`). |
+| **AnswerOption** | `answeroption` | Вариант ответа на вопрос (текст + флаг правильности). |
 | **QuizSubmission** | `quizsubmission` | Результат прохождения теста: балл и дата. |
 | **CourseReview** | `course_reviews` | Отзыв студента о курсе: рейтинг (1–5) и текст. Уникальность по паре `(student_id, course_id)`. |
 | **Tag** | `tags` | Метка для курса. Связь M:N с `Course` через таблицу `course_tag`. |
 
-Первичные ключи всех сущностей генерируются автоматически (`@GeneratedValue(strategy = GenerationType.IDENTITY)`), что соответствует механизу `SERIAL` / `IDENTITY` в PostgreSQL.
+Первичные ключи всех сущностей генерируются автоматически (`@GeneratedValue(strategy = GenerationType.IDENTITY)`), что соответствует механизму `SERIAL` / `IDENTITY` в PostgreSQL.
 
 ### 4.2. Типы связей
 
@@ -180,7 +180,7 @@ erDiagram
     USER {
         int id PK
         string name
-        string email
+        string login
         string role
     }
 
