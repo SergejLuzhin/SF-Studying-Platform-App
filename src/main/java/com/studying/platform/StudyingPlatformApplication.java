@@ -15,6 +15,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class StudyingPlatformApplication {
 
     /**
+     * Конструктор по умолчанию для точки входа в приложение.
+     * Используется Spring Boot для создания экземпляра приложения.
+     */
+    public StudyingPlatformApplication() {
+        // Точка входа — static main(), конструктор не требуется.
+    }
+
+    /**
      * Точка входа в приложение.
      * Запускает Spring Boot-приложение с автоматической конфигурацией.
      *
